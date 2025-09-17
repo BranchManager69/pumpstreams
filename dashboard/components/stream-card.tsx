@@ -85,8 +85,6 @@ export function StreamCard(props: StreamCardProps) {
       participants: number | null;
       marketCap: number | null;
     }> = [];
-    let previousTimestamp: number | null = null;
-    let detectedGap = false;
 
     const pushPoint = (timestamp: number, participants: number | null, marketCap: number | null) => {
       data.push({
@@ -97,15 +95,12 @@ export function StreamCard(props: StreamCardProps) {
       });
     };
 
+    let detectedGap = false;
+    let previousTimestamp: number | null = null;
     for (const point of sortedHistory) {
       if (previousTimestamp !== null && point.timestamp - previousTimestamp > gapThresholdMs) {
         detectedGap = true;
-        data.push({
-          timestamp: point.timestamp - 1,
-          label: 'gap',
-          participants: null,
-          marketCap: null,
-        });
+        pushPoint(previousTimestamp + 1, null, null);
       }
       pushPoint(point.timestamp, point.participants, point.marketCap);
       previousTimestamp = point.timestamp;
@@ -123,14 +118,17 @@ export function StreamCard(props: StreamCardProps) {
     if (shouldAppendLatest && latestTimestamp !== null) {
       if (lastPoint && latestTimestamp - lastPoint.timestamp > gapThresholdMs) {
         detectedGap = true;
-        data.push({
-          timestamp: latestTimestamp - 1,
-          label: 'gap',
-          participants: null,
-          marketCap: null,
-        });
+        pushPoint(lastPoint.timestamp + 1, null, null);
       }
       pushPoint(latestTimestamp, latestParticipants, latestMarketCap);
+    }
+
+    const nowTimestamp = Date.now();
+    const newest = data.at(-1);
+    if (newest && newest.timestamp && nowTimestamp - newest.timestamp > gapThresholdMs) {
+      detectedGap = true;
+      pushPoint(newest.timestamp + 1, null, null);
+      pushPoint(nowTimestamp, 0, 0);
     }
 
     return { chartData: data, hasGap: detectedGap };
@@ -159,9 +157,6 @@ export function StreamCard(props: StreamCardProps) {
         </div>
         <div className="row-meta">
           <span className="last-updated">Updated {formatRelativeToNow(props.latestAt)}</span>
-          {hasGap && (
-            <span className="gap-indicator" title={`No data for ≥${gapThresholdMinutes} minutes`}>gap ≥ {gapThresholdMinutes}m</span>
-          )}
         </div>
       </div>
         <div className="row-metrics">
@@ -225,6 +220,7 @@ export function StreamCard(props: StreamCardProps) {
               strokeWidth={2}
               connectNulls={false}
               isAnimationActive={false}
+              strokeDasharray={hasGap ? '6 4' : undefined}
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -202,17 +202,6 @@ h2 {
   white-space: nowrap;
 }
 
-.gap-indicator {
-  border-radius: 999px;
-  background: rgba(255, 199, 143, 0.12);
-  border: 1px solid rgba(255, 199, 143, 0.35);
-  color: #ffc78f;
-  padding: 0.15rem 0.6rem;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 .row-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
