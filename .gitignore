@@ -1,0 +1,17 @@
+# Node dependencies
+node_modules/
+
+# Logs and runtime output
+logs/
+artifacts/
+dist/
+tmp/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Env / credentials
+.env
+.env.*
