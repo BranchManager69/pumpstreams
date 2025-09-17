@@ -157,6 +157,35 @@ pm2 logs pumpstreams-live-poller
 The poller reads `.env.remote` first, so cloud writes are automatic. To target the local warehouse, start PM2 with
 `PUMPSTREAMS_ENV_FILE=.env.local` in the environment.
 
+### Analytics Dashboard (Next.js + PM2)
+
+The repo ships with a self-hosted Next.js dashboard that surfaces the top 30 livestreams and their historical metrics.
+It listens on port **3050** by default.
+
+```bash
+# Install dependencies (first time only)
+cd dashboard
+set -a && source ../.env.remote && npm install
+
+# Build for production (ensure Supabase env vars are present)
+set -a && source ../.env.remote && npm run build
+
+# Start under PM2 (from repo root)
+cd ..
+pm2 start ecosystem.config.cjs --only pumpstreams-dashboard
+
+# Tail the logs
+pm2 logs pumpstreams-dashboard
+```
+
+The dashboard uses Supabase service-role credentials at runtime (sourced from `.env.remote`). Adjust
+`DASHBOARD_TOP_LIMIT` or `DASHBOARD_LOOKBACK_MINUTES` to change the view. For local development:
+
+```bash
+cd dashboard
+set -a && source ../.env.remote && npm run dev
+```
+
 ## Testing
 
 Start with the offline helper sanity check (uses recorded fixtures, no network calls):

@@ -1,5 +1,7 @@
 # Node dependencies
 node_modules/
+dashboard/node_modules/
+dashboard/.next/
 
 # Logs and runtime output
 logs/
