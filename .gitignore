@@ -2,6 +2,9 @@
 node_modules/
 dashboard/node_modules/
 dashboard/.next/
+dashboard/playwright-report/
+dashboard/test-results/
+dashboard/tests/playwright/screenshots/
 
 # Logs and runtime output
 logs/

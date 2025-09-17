@@ -192,6 +192,20 @@ cd dashboard
 set -a && source ../.env.remote && npm run dev
 ```
 
+### Playwright Screenshots
+
+Automated screenshots run through Playwright and live alongside the dashboard.
+
+```bash
+cd dashboard
+set -a && source ../.env.remote
+npm run playwright:install      # one-time browser install
+npm run screenshots             # generates PNGs for desktop + mobile
+```
+
+PNG files are written to `dashboard/tests/playwright/screenshots/<project>/`. Modify
+`dashboard/tests/playwright/screenshots.spec.ts` to cover additional routes or adjust viewports.
+
 ## Testing
 
 Start with the offline helper sanity check (uses recorded fixtures, no network calls):

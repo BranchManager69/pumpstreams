@@ -8,5 +8,6 @@ npm install
 if [ -d dashboard ]; then
   pushd dashboard >/dev/null
   npm install
+  npm run playwright:install
   popd >/dev/null
 fi
