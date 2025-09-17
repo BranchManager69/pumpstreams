@@ -231,6 +231,7 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `DASHBOARD_LOOKBACK_MINUTES` | `180` | History range rendered in sparklines |
 | `DASHBOARD_STALE_THRESHOLD_MINUTES` | `10` | Minutes without updates before a stream is marked inactive |
 | `DASHBOARD_HISTORY_CHUNK_SIZE` | `100` | Batch size when fetching historical snapshots per Supabase request |
+| `NEXT_PUBLIC_SPARKLINE_GAP_MINUTES` | `3` | Break sparkline lines when gaps exceed this many minutes |
 
 Edit the config object in `monitor.mjs` for WebSocket behaviour:
 

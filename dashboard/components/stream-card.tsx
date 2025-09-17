@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { SnapshotPoint } from '../lib/types';
 
@@ -65,24 +66,75 @@ function formatDelta(value: number | null | undefined, compact = false) {
 }
 
 export function StreamCard(props: StreamCardProps) {
-  const history = props.snapshotHistory.map((point) => ({
-    time: new Date(point.fetched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    participants: point.num_participants ?? 0,
-    marketCap: point.market_cap ?? 0,
-  }));
+  const gapThresholdMinutes = Number(process.env.NEXT_PUBLIC_SPARKLINE_GAP_MINUTES ?? '3');
+  const gapThresholdMs = gapThresholdMinutes * 60 * 1000;
 
-  const latestParticipants = props.participants ?? null;
-  if (
-    latestParticipants !== null &&
-    latestParticipants !== undefined &&
-    (history.length === 0 || history.at(-1)?.participants !== latestParticipants)
-  ) {
-    history.push({
-      time: new Date(props.latestAt ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      participants: latestParticipants,
-      marketCap: props.marketCap ?? 0,
-    });
-  }
+  const { chartData, hasGap } = useMemo(() => {
+    const sortedHistory = [...props.snapshotHistory]
+      .map((point) => ({
+        timestamp: new Date(point.fetched_at).getTime(),
+        participants: point.num_participants ?? null,
+        marketCap: point.market_cap ?? null,
+      }))
+      .filter((point) => Number.isFinite(point.timestamp))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    const data: Array<{
+      timestamp: number;
+      label: string;
+      participants: number | null;
+      marketCap: number | null;
+    }> = [];
+    let previousTimestamp: number | null = null;
+    let detectedGap = false;
+
+    const pushPoint = (timestamp: number, participants: number | null, marketCap: number | null) => {
+      data.push({
+        timestamp,
+        label: new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        participants,
+        marketCap,
+      });
+    };
+
+    for (const point of sortedHistory) {
+      if (previousTimestamp !== null && point.timestamp - previousTimestamp > gapThresholdMs) {
+        detectedGap = true;
+        data.push({
+          timestamp: point.timestamp - 1,
+          label: 'gap',
+          participants: null,
+          marketCap: null,
+        });
+      }
+      pushPoint(point.timestamp, point.participants, point.marketCap);
+      previousTimestamp = point.timestamp;
+    }
+
+    const latestTimestamp = props.latestAt ? new Date(props.latestAt).getTime() : null;
+    const latestParticipants = props.participants ?? null;
+    const latestMarketCap = props.marketCap ?? null;
+
+    const lastPoint = data.at(-1);
+    const shouldAppendLatest =
+      latestTimestamp !== null &&
+      (lastPoint === undefined || lastPoint.timestamp !== latestTimestamp || lastPoint.participants !== latestParticipants);
+
+    if (shouldAppendLatest && latestTimestamp !== null) {
+      if (lastPoint && latestTimestamp - lastPoint.timestamp > gapThresholdMs) {
+        detectedGap = true;
+        data.push({
+          timestamp: latestTimestamp - 1,
+          label: 'gap',
+          participants: null,
+          marketCap: null,
+        });
+      }
+      pushPoint(latestTimestamp, latestParticipants, latestMarketCap);
+    }
+
+    return { chartData: data, hasGap: detectedGap };
+  }, [props.snapshotHistory, props.participants, props.marketCap, props.latestAt, gapThresholdMs]);
 
   const deltaClass = (value: number | null | undefined) => {
     if (value === null || value === undefined || !Number.isFinite(value)) return '';
@@ -101,14 +153,17 @@ export function StreamCard(props: StreamCardProps) {
       </div>
       <div className="row-content">
         <div className="row-header">
-          <div>
-            <div className="row-title">{props.name || 'Untitled Stream'}</div>
-            <div className="row-subtitle">{props.symbol || '—'} · {props.mintId.slice(0, 8)}...</div>
-          </div>
-          <div className="row-meta">
-            <span className="last-updated">Updated {formatRelativeToNow(props.latestAt)}</span>
-          </div>
+        <div>
+          <div className="row-title">{props.name || 'Untitled Stream'}</div>
+          <div className="row-subtitle">{props.symbol || '—'} · {props.mintId.slice(0, 8)}...</div>
         </div>
+        <div className="row-meta">
+          <span className="last-updated">Updated {formatRelativeToNow(props.latestAt)}</span>
+          {hasGap && (
+            <span className="gap-indicator" title={`No data for ≥${gapThresholdMinutes} minutes`}>gap ≥ {gapThresholdMinutes}m</span>
+          )}
+        </div>
+      </div>
         <div className="row-metrics">
           <div className="metric">
             <span>Viewers</span>
@@ -124,14 +179,14 @@ export function StreamCard(props: StreamCardProps) {
       </div>
       <div className="row-chart">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={history} margin={{ left: 0, right: 0, top: 6, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ left: 0, right: 0, top: 6, bottom: 0 }}>
             <defs>
               <linearGradient id={`colorViewers-${props.mintId}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#7bf0ff" stopOpacity={0.75} />
                 <stop offset="100%" stopColor="#7bf0ff" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            <XAxis hide dataKey="time" interval="preserveStartEnd" />
+            <XAxis hide dataKey="label" interval="preserveStartEnd" />
             <YAxis hide domain={['auto', 'auto']} />
             <Tooltip
               contentStyle={{
@@ -140,9 +195,37 @@ export function StreamCard(props: StreamCardProps) {
                 borderRadius: 12,
               }}
               labelStyle={{ color: '#93b3ff', fontWeight: 600 }}
-              formatter={(value: number, name: string) => [value.toLocaleString(), name === 'participants' ? 'Viewers' : 'Market Cap (SOL)']}
+              formatter={(value, name) => {
+                const metricName = name === 'participants' ? 'Viewers' : 'Market Cap (SOL)';
+                if (value === null || value === undefined) {
+                  return ['No data', metricName];
+                }
+                if (Array.isArray(value)) {
+                  const numeric = Number(value[0]);
+                  if (Number.isFinite(numeric)) {
+                    return [numeric.toLocaleString(), metricName];
+                  }
+                  return [String(value[0]), metricName];
+                }
+                if (typeof value === 'number') {
+                  return [value.toLocaleString(), metricName];
+                }
+                const numeric = Number(value);
+                if (Number.isFinite(numeric)) {
+                  return [numeric.toLocaleString(), metricName];
+                }
+                return [String(value), metricName];
+              }}
             />
-            <Area type="monotone" dataKey="participants" stroke="#7bf0ff" fill={`url(#colorViewers-${props.mintId})`} strokeWidth={2} />
+            <Area
+              type="monotone"
+              dataKey="participants"
+              stroke="#7bf0ff"
+              fill={`url(#colorViewers-${props.mintId})`}
+              strokeWidth={2}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
