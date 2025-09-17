@@ -299,3 +299,10 @@ To see WebSocket data in browser:
 ## License
 
 Distributed under the [MIT License](LICENSE). Feel free to fork, extend, and build your own monitoring pipelines—credit is appreciated.
+
+
+## TODO / Ideas
+- Convert Next.js dashboard top section into a vertical leaderboard with infinity scroll or pagination.
+- Introduce filters (min viewers, search by mint/name) and compare charts side by side.
+- Show still streams (inactive) with dimmed style and optional include toggle.
+
