@@ -179,9 +179,9 @@ pm2 logs pumpstreams-dashboard
 ```
 
 The dashboard uses Supabase service-role credentials at runtime (sourced from `.env.remote`). Adjust
-`DASHBOARD_TOP_LIMIT` or `DASHBOARD_LOOKBACK_MINUTES` to change the view. For local development:
+`DASHBOARD_TOP_LIMIT`, `DASHBOARD_LOOKBACK_MINUTES`, or `DASHBOARD_STALE_THRESHOLD_MINUTES` to change the view. For local development:
 
-```bash
+````bash
 cd dashboard
 set -a && source ../.env.remote && npm run dev
 ```

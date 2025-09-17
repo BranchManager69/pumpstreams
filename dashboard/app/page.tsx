@@ -6,6 +6,7 @@ export const revalidate = 30;
 
 const TOP_LIMIT = Number(process.env.DASHBOARD_TOP_LIMIT ?? '30');
 const LOOKBACK_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
+const STALE_THRESHOLD_MINUTES = Number(process.env.DASHBOARD_STALE_THRESHOLD_MINUTES ?? '10');
 
 async function fetchTopStreams() {
   const supabase = getServiceClient();
@@ -28,6 +29,7 @@ async function fetchTopStreams() {
 
   const latestByMint = new Map<string, (typeof snapshotRows)[number]>();
   const histories = new Map<string, SnapshotPoint[]>();
+  const staleCutoff = Date.now() - STALE_THRESHOLD_MINUTES * 60 * 1000;
 
   for (const row of snapshotRows) {
     if (!histories.has(row.mint_id)) {
@@ -38,6 +40,11 @@ async function fetchTopStreams() {
       num_participants: row.num_participants,
       market_cap: row.market_cap,
     });
+
+    const rowTime = new Date(row.fetched_at).getTime();
+    if (rowTime < staleCutoff) {
+      continue;
+    }
 
     if (!latestByMint.has(row.mint_id)) {
       latestByMint.set(row.mint_id, row);
