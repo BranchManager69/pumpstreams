@@ -58,8 +58,8 @@ async function fetchTopStreams(): Promise<DashboardSummary> {
 
   const latestLimit = Math.max(TOP_LIMIT * 3, FETCH_LIMIT);
   const { data: latestRows, error: latestError } = await supabase
-    .from('token_latest_snapshot')
-    .select('mint_id, fetched_at, num_participants, market_cap, thumbnail, livestream')
+    .from('livestream_latest')
+    .select('mint_id, fetched_at, num_participants, market_cap, usd_market_cap, thumbnail, livestream, is_live')
     .order('num_participants', { ascending: false })
     .limit(latestLimit);
 
@@ -124,6 +124,7 @@ async function fetchTopStreams(): Promise<DashboardSummary> {
             fetchedAt,
             numParticipants: latest.num_participants ?? null,
             marketCap: latest.market_cap ?? null,
+            usdMarketCap: latest.usd_market_cap ?? null,
             thumbnail: latest.thumbnail ?? null,
           }
         : null,
