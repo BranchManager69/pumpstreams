@@ -8,6 +8,7 @@
     "start": "node monitor.mjs",
     "test": "node --test",
     "advanced": "node advanced.mjs",
+    "offline": "node --test tests/helpers-offline.test.mjs",
     "monitor": "node monitor.mjs",
     "live": "node livestream-cli.mjs",
     "investigate": "node live-investigator.mjs",
