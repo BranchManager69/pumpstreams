@@ -321,3 +321,23 @@ Distributed under the [MIT License](LICENSE). Feel free to fork, extend, and bui
 - Convert Next.js dashboard top section into a vertical leaderboard with infinity scroll or pagination.
 - Introduce filters (min viewers, search by mint/name) and compare charts side by side.
 - Show still streams (inactive) with dimmed style and optional include toggle.
+
+## Codex Cloud Setup
+
+This repository is ready for [OpenAI Codex Cloud environments](https://developers.openai.com/codex/cloud/environments/).
+
+- **Setup script** – `codex/setup.sh` installs the root dependencies and the
+  `dashboard/` Next.js packages. Point the Codex environment at this script so
+  cached containers always have the right toolchain installed.
+- **Agent instructions** – `AGENTS.md` documents the setup, build, and test
+  commands that Codex (or a human teammate) should run. Codex automatically
+  tries to honor any lint/test commands defined here.
+- **Environment variables** – define Supabase credentials (`SUPABASE_URL`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`) in the
+  Codex environment settings or secrets panel.
+- **Node version** – the project targets Node 20, which matches the default
+  `universal` Codex image. Update the environment setting if you bump the
+  version in `package.json`.
+- **Ports** – production uses port `3050`. When you run `npm run dev` in Codex
+  (for HMR), choose an alternate port (`npm run dev -- --port 3051`) to avoid
+  conflicts.
