@@ -233,6 +233,7 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `DASHBOARD_HISTORY_CHUNK_SIZE` | `100` | Batch size when fetching historical snapshots per Supabase request |
 | `NEXT_PUBLIC_SPARKLINE_GAP_MINUTES` | `3` | Break sparkline lines when gaps exceed this many minutes |
 | `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
+| `DASHBOARD_HISTORY_MAX_POINTS` | `120` | Maximum number of points kept per sparkline history |
 
 Edit the config object in `monitor.mjs` for WebSocket behaviour:
 

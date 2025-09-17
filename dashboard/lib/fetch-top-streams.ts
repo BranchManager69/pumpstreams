@@ -10,6 +10,8 @@ const FETCH_LIMIT = Math.min(
   1000
 );
 const HISTORY_CHUNK_SIZE = Number(process.env.DASHBOARD_HISTORY_CHUNK_SIZE ?? '100');
+const HISTORY_MAX_POINTS = Number(process.env.DASHBOARD_HISTORY_MAX_POINTS ?? '120');
+const MINT_LIMIT = Math.min(TOP_LIMIT * 2, FETCH_LIMIT);
 
 type HistoryRow = {
   mint_id: string;
@@ -50,15 +52,12 @@ export type FetchTopStreamsResult = {
 export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
   const supabase = getServiceClient();
   const lookbackIso = new Date(Date.now() - LOOKBACK_MINUTES * 60 * 1000).toISOString();
-  const staleCutoff = Date.now() - STALE_THRESHOLD_MINUTES * 60 * 1000;
+  const staleCutoffMs = Date.now() - STALE_THRESHOLD_MINUTES * 60 * 1000;
 
   const latestLimit = Math.max(TOP_LIMIT * 3, FETCH_LIMIT);
-  const staleCutoffIso = new Date(Date.now() - STALE_THRESHOLD_MINUTES * 60 * 1000).toISOString();
-
   const { data: latestRows, error: latestError } = await supabase
     .from('livestream_latest')
-    .select('mint_id, fetched_at, num_participants, market_cap, thumbnail, livestream, is_live')
-    .gte('fetched_at', staleCutoffIso)
+    .select('mint_id, fetched_at, num_participants, market_cap, thumbnail, livestream')
     .order('num_participants', { ascending: false })
     .limit(latestLimit);
 
@@ -66,16 +65,18 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
     throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
   }
 
-  const orderedLatest = (latestRows ?? []).filter((row): row is Exclude<typeof latestRows, null>[number] => Boolean(row?.mint_id));
+  const filteredLatest = (latestRows ?? [])
+    .filter((row): row is Exclude<typeof latestRows, null>[number] => Boolean(row?.mint_id))
+    .filter((row) => new Date(row.fetched_at).getTime() >= staleCutoffMs);
+
   const mintOrder: string[] = [];
   const seen = new Set<string>();
-
-  for (const row of orderedLatest) {
+  for (const row of filteredLatest) {
     if (!seen.has(row.mint_id)) {
       seen.add(row.mint_id);
       mintOrder.push(row.mint_id);
     }
-    if (mintOrder.length >= latestLimit) {
+    if (mintOrder.length >= MINT_LIMIT) {
       break;
     }
   }
@@ -106,28 +107,29 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
 
   const historyMap = buildHistoryMap(historyRows, mintOrder);
 
-  const entries: SerializableStream[] = mintOrder.map((mintId) => {
-    const latest = orderedLatest.find((row) => row.mint_id === mintId) ?? null;
-    const history = historyMap.get(mintId) ?? [];
-    const fetchedAt = latest?.fetched_at ?? null;
-    const isStale = fetchedAt ? new Date(fetchedAt).getTime() < staleCutoff : true;
-    const livestreamMeta = (latest?.livestream as Record<string, any> | null) ?? null;
+  const entries: SerializableStream[] = mintOrder.flatMap((mintId) => {
+    const latest = filteredLatest.find((row) => row.mint_id === mintId);
+    if (!latest) return [];
 
-    return {
+    const history = historyMap.get(mintId) ?? [];
+    const trimmedHistory = HISTORY_MAX_POINTS > 0 ? history.slice(-HISTORY_MAX_POINTS) : history;
+    const fetchedAt = latest.fetched_at;
+    const isStale = new Date(fetchedAt).getTime() < staleCutoffMs;
+    const livestreamMeta = (latest.livestream as Record<string, any> | null) ?? null;
+
+    return [{
       mintId,
       name: livestreamMeta?.name ?? null,
       symbol: livestreamMeta?.symbol ?? null,
-      latest: latest
-        ? {
-            fetchedAt,
-            numParticipants: latest.num_participants ?? null,
-            marketCap: latest.market_cap ?? null,
-            thumbnail: latest.thumbnail ?? null,
-          }
-        : null,
-      history,
+      latest: {
+        fetchedAt,
+        numParticipants: latest.num_participants ?? null,
+        marketCap: latest.market_cap ?? null,
+        thumbnail: latest.thumbnail ?? null,
+      },
+      history: trimmedHistory,
       isStale,
-    };
+    }];
   });
 
   entries.sort((a, b) => {
@@ -136,8 +138,9 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
     return bParticipants - aParticipants;
   });
 
-  const activeEntries = entries.filter((entry) => !entry.isStale).slice(0, TOP_LIMIT);
-  const inactiveCount = entries.filter((entry) => entry.isStale).length;
+  const trimmedEntries = entries.slice(0, TOP_LIMIT);
+  const activeEntries = trimmedEntries.filter((entry) => !entry.isStale);
+  const inactiveCount = trimmedEntries.length - activeEntries.length;
   const totals = {
     activeCount: activeEntries.length,
     inactiveCount,
@@ -145,7 +148,7 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
     totalMarketCap: activeEntries.reduce((acc, entry) => acc + (entry.latest?.marketCap ?? 0), 0),
   };
 
-  return { entries, totals };
+  return { entries: trimmedEntries, totals };
 }
 
 export function getDashboardConfig() {
