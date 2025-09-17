@@ -1,7 +1,9 @@
+import './lib/env.js';
 import io from 'socket.io-client';
 import fs from 'fs/promises';
 import path from 'path';
 import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
+import { persistTradeEvent, flushSupabaseQueues } from './lib/supabase-storage.js';
 
 const PUMP_FUN_WS = 'https://frontend-api-v3.pump.fun';
 const ORIGIN = 'https://pump.fun';
@@ -124,6 +126,8 @@ function processTrade(trade) {
       }) + '\n').catch(console.error);
     }
   }
+
+  persistTradeEvent(trade);
 }
 
 // Display statistics
@@ -277,6 +281,10 @@ process.on('SIGINT', async () => {
     }, null, 2));
     console.log(`\n💾 Summary saved to ${summaryFile}`);
   }
+
+  await flushSupabaseQueues().catch((error) => {
+    console.error('[supabase] Flush failed during shutdown:', error.message);
+  });
 
   socket.close();
   process.exit(0);

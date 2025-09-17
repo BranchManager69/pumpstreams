@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import './lib/env.js';
 import { parseArgs } from 'util';
 import { getLivekitConnectionDetails, decodeJwt } from './lib/livestream-api.js';
 import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
+import { persistLivestreamSession } from './lib/supabase-storage.js';
 
 const { positionals, values } = parseArgs({
   options: {
@@ -139,6 +141,10 @@ async function main() {
 
 async function outputSummary() {
   const json = toJson(summary);
+
+  await persistLivestreamSession(summary).catch((error) => {
+    console.error('[supabase] Failed to persist LiveKit session:', error.message);
+  });
 
   if (outputTarget) {
     const fileName = buildJsonFileName({

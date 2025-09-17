@@ -13,6 +13,7 @@
     "live": "node livestream-cli.mjs",
     "investigate": "node live-investigator.mjs",
     "subscribe": "node livekit-subscriber.mjs",
+    "analyze": "node analytics.mjs",
     "smoke": "PUMPSTREAMS_TEST_LIMIT=1 node --test tests/livestream-endpoints.test.mjs",
     "ws-test": "node test.mjs"
   },
@@ -26,6 +27,8 @@
   "license": "ISC",
   "dependencies": {
     "@livekit/rtc-node": "^0.13.18",
+    "@supabase/supabase-js": "^2.57.4",
+    "dotenv": "^16.6.1",
     "puppeteer": "^24.21.0",
     "socket.io-client": "^4.8.1",
     "ws": "^8.18.3"

@@ -17,3 +17,4 @@ Thumbs.db
 # Env / credentials
 .env
 .env.*
+!.env.example

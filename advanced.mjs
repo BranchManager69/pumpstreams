@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import './lib/env.js';
 import io from 'socket.io-client';
 import { parseArgs } from 'util';
 import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
+import { persistTradeEvent, flushSupabaseQueues } from './lib/supabase-storage.js';
 
 // Parse command line arguments
 const { values: options } = parseArgs({
@@ -244,6 +246,7 @@ socket.on('tradeCreated', (data) => {
     }
 
     updateStats(trade);
+    persistTradeEvent(trade);
 
     if (statsMode) {
       showStats();
@@ -265,8 +268,12 @@ process.on('SIGINT', () => {
     console.log(`Total Volume: ${formatSol(stats.volumeLamports)} SOL`);
     console.log(`Buy/Sell Ratio: ${stats.buys}/${stats.sells}`);
   }
-  socket.close();
-  process.exit(0);
+  flushSupabaseQueues()
+    .catch((error) => console.error('[supabase] Flush failed during shutdown:', error.message))
+    .finally(() => {
+      socket.close();
+      process.exit(0);
+    });
 });
 
 // Keep process alive

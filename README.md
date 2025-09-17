@@ -22,7 +22,13 @@ Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and
 git clone https://github.com/BranchManager69/pumpstreams.git
 cd pumpstreams
 npm install
+cp .env.example .env.local   # customise if you want a remote Supabase project
+supabase start               # launches the bundled Supabase warehouse on high ports
 ```
+
+The repo ships with a Supabase local stack pre-configured on high ports (`5542x`). The generated `.env.local`
+already contains the service role key for this local environment so every CLI persists data immediately.
+Replace those values with your remote Supabase credentials when you are ready to graduate to hosted infra.
 
 ## WebSocket Endpoint
 
@@ -67,6 +73,9 @@ npm run live -- regions <mint>
 
 # Emit raw JSON for scripting
 npm run live -- list --json
+
+# Persist snapshot for analytics, then print top movers
+npm run live -- info <mint> --json --output dumps/ && npm run analyze -- --limit 5
 ```
 
 ### Live Investigator (`live-investigator.mjs`)
@@ -88,6 +97,32 @@ npm run subscribe -- <mint> --duration 45 --output captures/ --json
 # Quick peek with console output only
 npm run subscribe -- --mint <mint> --duration 20
 ```
+
+Each subscriber run writes a structured session document to Supabase (`livestream_sessions`), which plugs
+directly into the analytics CLI: `npm run analyze -- --limit 10`.
+
+### Analytics Console
+
+```bash
+# Refresh hourly aggregates then dump the top streams as JSON
+npm run analyze -- --refresh --json
+
+# Human-readable snapshot (top 10 by participants and trade flow)
+npm run analyze -- --limit 10
+```
+
+The analytics script pulls from the Supabase tables populated by the monitoring pipeline:
+
+| Table | Purpose |
+|-------|---------|
+| `tokens` | 1:1 catalogue of Pump.fun mints with core metadata |
+| `livestream_snapshots` | Time-series snapshots of livestream viewers/thumbnail/mode |
+| `livestream_sessions` | LiveKit subscriber session summaries (tracks, participants, duration) |
+| `livestream_regions` | Region latency probes tied to a snapshot |
+| `trade_events` | Raw trade feed captured from the WebSocket monitors |
+| `token_hourly_metrics` | Rolling per-token hourly volume/bias metrics |
+
+Views such as `token_latest_snapshot`, `token_trade_summary`, and `token_hourly_trend` power the console output.
 
 ## Testing
 

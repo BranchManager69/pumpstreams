@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import './lib/env.js';
 import { parseArgs } from 'util';
 import { getCurrentlyLive, getLivestreamSnapshot, getJoinToken, decodeJwt, getLivekitRegions } from './lib/livestream-api.js';
 import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
+import { persistLivestreamSnapshot, persistLivestreamRegions, persistLiveRoster } from './lib/supabase-storage.js';
 
 const commands = ['list', 'info', 'join', 'regions', 'help'];
 
@@ -80,6 +82,7 @@ async function run() {
 async function handleList() {
   const limit = Number(values.limit);
   const data = await getCurrentlyLive({ limit });
+  const fetchedAt = new Date().toISOString();
 
   if (!values.json) {
     if (!data.length) {
@@ -99,8 +102,12 @@ async function handleList() {
     }
   }
 
+  await persistLiveRoster(data, fetchedAt).catch((error) => {
+    console.error('[supabase] Failed to persist live roster:', error.message);
+  });
+
   return {
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     limit,
     streams: data,
   };
@@ -116,6 +123,7 @@ async function handleInfo(mintId) {
     includeClips: values.clips,
     includeToken: values.includeToken,
   });
+  const fetchedAt = new Date().toISOString();
 
   if (!values.json) {
     const { livestream } = snapshot;
@@ -147,9 +155,13 @@ async function handleInfo(mintId) {
     }
   }
 
+  await persistLivestreamSnapshot({ mintId, fetchedAt, snapshot }).catch((error) => {
+    console.error('[supabase] Failed to persist livestream snapshot:', error.message);
+  });
+
   return {
     mintId,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     snapshot,
   };
 }
@@ -187,6 +199,7 @@ async function handleRegions(mintId) {
 
   const join = await getJoinToken(mintId);
   const regions = await getLivekitRegions(join.token);
+  const fetchedAt = new Date().toISOString();
   if (!values.json) {
     if (!regions.length) {
       console.log('No LiveKit regions reported');
@@ -198,9 +211,13 @@ async function handleRegions(mintId) {
     }
   }
 
+  await persistLivestreamRegions({ mintId, fetchedAt, regions }).catch((error) => {
+    console.error('[supabase] Failed to persist regions:', error.message);
+  });
+
   return {
     mintId,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     regions,
   };
 }
