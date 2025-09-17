@@ -4,6 +4,8 @@ node_modules/
 # Logs and runtime output
 logs/
 artifacts/
+captures/
+dumps/
 dist/
 tmp/
 *.log

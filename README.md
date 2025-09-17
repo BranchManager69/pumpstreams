@@ -1,93 +1,75 @@
-# PumpStreams - Pump.fun WebSocket Monitor
+# PumpStreams
 
-Standalone toolkit for mapping pump.fun live trading and livestream infrastructure.
+[![Node.js](https://img.shields.io/badge/node-%3E=20.0-green.svg)](https://nodejs.org/en/download)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live Endpoints](https://img.shields.io/badge/pump.fun-live%20API-success.svg)](https://pump.fun/live)
+
+Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and livestream stack. It discovers active rooms, captures WebSocket traffic, records LiveKit metadata, and surfaces everything through a clean CLI.
+
+## Highlights
+
+- **Livestream discovery** – enumerate active coins with viewer counts, market caps, and thumbnails.
+- **Metadata deep dive** – fetch full livestream snapshots (clips, approval status, viewer tokens) in structured JSON.
+- **LiveKit session capture** – connect as a viewer, subscribe to tracks, and log participants/connection events.
+- **Browser-grade recon** – headless capture of `pump.fun/live`, including screenshots, DOM dumps, and network payloads.
+- **Configurable + automation-friendly** – environment variables for hosts/headers, file-based outputs, and live integration tests.
+
+---
 
 ## Installation
 
 ```bash
-cd /home/branchmanager/websites/pumpstreams
+git clone https://github.com/BranchManager69/pumpstreams.git
+cd pumpstreams
 npm install
 ```
 
-## WebSocket Details
+## WebSocket Endpoint
 
-**Endpoint:** `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket`
-**Protocol:** Socket.io v4
-**Main Event:** `tradeCreated`
+- **URL:** `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket`
+- **Protocol:** Socket.io v4 (`tradeCreated` is the primary event)
 
-## Available Scripts
+## CLI & Automation Toolkit
 
-### 1. Test Connection (`test.mjs`)
-Simple connection test to verify WebSocket is working and see raw events.
+### WebSocket Monitors
 
 ```bash
-npm test
-# or
-node test.mjs
-```
+# Connectivity smoke test
+npm run ws-test
 
-### 2. Full Monitor (`monitor.mjs`)
-Comprehensive monitor with statistics, logging, and filtering.
-
-```bash
-npm start
-# or
+# Full monitor with stats + JSONL logging
 npm run monitor
-# or
-node monitor.mjs
 ```
 
-Features:
-- Real-time trade display with filtering
-- Statistics tracking (volume, unique users, top tokens)
-- File logging (JSON Lines format)
-- Configurable filters (min SOL amount, buy/sell)
-- Automatic summary generation on exit
-
-### 3. Advanced CLI (`advanced.mjs`)
-Command-line tool with extensive filtering options.
+### Advanced Trade Explorer (`advanced.mjs`)
 
 ```bash
-npm run advanced
-# or
-node advanced.mjs [options]
-
-# Show help
-node advanced.mjs --help
-
-# Filter examples
-node advanced.mjs --min-sol 1 --buys-only
-node advanced.mjs --large-trades
-node advanced.mjs --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
-node advanced.mjs --user 5AdtwpiT5gD4eupzPkEoYaqcUnXixgmKtFae9CxXJbSD
-
-# Output formats
-node advanced.mjs --csv > trades.csv
-node advanced.mjs --raw
-node advanced.mjs --stats
+npm run advanced -- --help
+npm run advanced -- --min-sol 1 --buys-only
+npm run advanced -- --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
+npm run advanced -- --csv > trades.csv
 ```
 
-### 4. Livestream CLI (`livestream-cli.mjs`)
-Discover the real livestream catalogue, gather token metadata, and retrieve viewer credentials for Pump.fun's LiveKit infrastructure.
+### Livestream Catalogue (`livestream-cli.mjs`)
 
 ```bash
-# Show top live streams with viewer counts and market caps
+# Top live streams with viewer counts + market caps
 npm run live -- --limit 10
 
-# Inspect a specific mint (include LiveKit token & clip history)
+# Deep dive on a mint (clips + viewer token)
 npm run live -- info <mint> --clips --includeToken
 
-# Emit machine-readable JSON (optionally write to file)
-npm run live -- info <mint> --json --output live.json
+# Structured JSON output (auto filenames inside ./dumps)
+npm run live -- info <mint> --json --output dumps/
 
-# Fetch LiveKit edge regions (requires mint)
+# Inspect LiveKit regions used by a room
 npm run live -- regions <mint>
 
 # Emit raw JSON for scripting
 npm run live -- list --json
 ```
 
-### 5. Live Investigator (`live-investigator.mjs`)
+### Live Investigator (`live-investigator.mjs`)
 Headless Puppeteer reconnaissance that captures screenshots, DOM summaries, WebSocket frames, and REST payloads powering `pump.fun/live`.
 
 Artifacts (HTML snapshot, JSON logs, PNG screenshots) are saved under `artifacts/<timestamp>/` for further analysis:
@@ -96,15 +78,15 @@ Artifacts (HTML snapshot, JSON logs, PNG screenshots) are saved under `artifacts
 npm run investigate
 ```
 
-### 6. LiveKit Subscriber (`livekit-subscriber.mjs`)
+### LiveKit Subscriber (`livekit-subscriber.mjs`)
 Connects to a livestream room with the issued viewer token, listens for participants and tracks, and captures a structured session summary.
 
 ```bash
 # Observe a room for 45 seconds, write summary JSON to ./captures/
-npm run subscribe -- V5cCiSixPLAiEDX2zZquT5VuLm4prr5t35PWmjNpump --duration 45 --output captures/ --json
+npm run subscribe -- <mint> --duration 45 --output captures/ --json
 
 # Quick peek with console output only
-npm run subscribe -- --mint V5cCiSixPLAiEDX2zZquT5VuLm4prr5t35PWmjNpump --duration 20
+npm run subscribe -- --mint <mint> --duration 20
 ```
 
 ## Testing
@@ -207,3 +189,7 @@ To see WebSocket data in browser:
 4. Filter by "WS" (WebSocket)
 5. Click on the socket.io connection
 6. View Messages tab for real-time data
+
+## License
+
+Distributed under the [MIT License](LICENSE). Feel free to fork, extend, and build your own monitoring pipelines—credit is appreciated.
