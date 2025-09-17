@@ -56,6 +56,7 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
   const { data: latestRows, error: latestError } = await supabase
     .from('livestream_latest')
     .select('mint_id, fetched_at, num_participants, market_cap, thumbnail, livestream, is_live')
+    .eq('is_live', true)
     .order('num_participants', { ascending: false })
     .limit(latestLimit);
 
@@ -63,7 +64,9 @@ export async function fetchTopStreams(): Promise<FetchTopStreamsResult> {
     throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
   }
 
-  const orderedLatest = (latestRows ?? []).filter((row): row is Exclude<typeof latestRows, null>[number] => Boolean(row?.mint_id));
+  const orderedLatest = (latestRows ?? [])
+    .filter((row): row is Exclude<typeof latestRows, null>[number] => Boolean(row?.mint_id))
+    .filter((row) => row?.is_live !== false);
   const mintOrder: string[] = [];
   const seen = new Set<string>();
 
