@@ -33,10 +33,10 @@ cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashb
 
 The repo supports two analytics back-ends out of the box:
 
-- **Local Supabase** – `supabase start` spins up a Postgres instance on ports `5542x`. Commands use it when
-  invoked normally (the default `.env.local`).
-- **Hosted Supabase Cloud** – point `.env.remote` at your production project, then prefix any command with
-  `PUMPSTREAMS_ENV_FILE=.env.remote` to run against the hosted warehouse.
+- **Hosted Supabase Cloud (default)** – commands look for `.env.remote` first. With the supplied file in
+  place, every CLI run will persist to the cloud project automatically.
+- **Local Supabase** – `supabase start` spins up a Postgres instance on ports `5542x`. Prefix commands with
+  `PUMPSTREAMS_ENV_FILE=.env.local` whenever you want to target the local warehouse instead.
 
 ## WebSocket Endpoint
 
@@ -132,7 +132,8 @@ The analytics script pulls from the Supabase tables populated by the monitoring 
 
 Views such as `token_latest_snapshot`, `token_trade_summary`, and `token_hourly_trend` power the console output.
 
-> Tip: omit `PUMPSTREAMS_ENV_FILE=…` to use the default `.env.local` configuration.
+> Tip: omit `PUMPSTREAMS_ENV_FILE=…` to use the default `.env.remote` configuration; set
+> `PUMPSTREAMS_ENV_FILE=.env.local` when you want the bundled local stack.
 
 ## Testing
 
