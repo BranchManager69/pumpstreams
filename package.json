@@ -12,6 +12,7 @@
     "live": "node livestream-cli.mjs",
     "investigate": "node live-investigator.mjs",
     "subscribe": "node livekit-subscriber.mjs",
+    "smoke": "PUMPSTREAMS_TEST_LIMIT=1 node --test tests/livestream-endpoints.test.mjs",
     "ws-test": "node test.mjs"
   },
   "keywords": [

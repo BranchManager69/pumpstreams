@@ -94,6 +94,9 @@ npm run subscribe -- --mint <mint> --duration 20
 The test suite talks to the public pump.fun APIs—no mocks, no fixtures. Keep usage polite and trim the roster size when needed:
 
 ```bash
+# Quick smoke check (limit 1 stream, 30s timeout)
+npm run smoke
+
 # Default run (limit 3 streams, 60s timeout)
 npm test
 
