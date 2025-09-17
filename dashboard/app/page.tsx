@@ -9,37 +9,27 @@ const LOOKBACK_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180')
 
 async function fetchTopStreams() {
   const supabase = getServiceClient();
+  const lookbackIso = new Date(Date.now() - LOOKBACK_MINUTES * 60 * 1000).toISOString();
 
-  const { data: latestRows, error: latestError } = await supabase
-    .from('token_latest_snapshot')
-    .select('mint_id, num_participants, market_cap, livestream')
-    .order('num_participants', { ascending: false })
-    .limit(TOP_LIMIT);
+  const { data: snapshotRows, error: snapshotError } = await supabase
+    .from('livestream_snapshots')
+    .select('mint_id, fetched_at, num_participants, market_cap, livestream')
+    .gte('fetched_at', lookbackIso)
+    .order('fetched_at', { ascending: false })
+    .limit(TOP_LIMIT * 40);
 
-  if (latestError) {
-    throw new Error(`Failed to fetch latest snapshots: ${latestError.message}`);
+  if (snapshotError) {
+    throw new Error(`Failed to fetch livestream snapshots: ${snapshotError.message}`);
   }
 
-  if (!latestRows?.length) {
+  if (!snapshotRows?.length) {
     return { topStreams: [], histories: new Map<string, SnapshotPoint[]>() };
   }
 
-  const mintIds = latestRows.map((row) => row.mint_id);
-  const lookbackIso = new Date(Date.now() - LOOKBACK_MINUTES * 60 * 1000).toISOString();
-
-  const { data: snapshotHistory, error: historyError } = await supabase
-    .from('livestream_snapshots')
-    .select('mint_id, fetched_at, num_participants, market_cap')
-    .in('mint_id', mintIds)
-    .gte('fetched_at', lookbackIso)
-    .order('fetched_at', { ascending: true });
-
-  if (historyError) {
-    throw new Error(`Failed to fetch snapshot history: ${historyError.message}`);
-  }
-
+  const latestByMint = new Map<string, (typeof snapshotRows)[number]>();
   const histories = new Map<string, SnapshotPoint[]>();
-  snapshotHistory?.forEach((row) => {
+
+  for (const row of snapshotRows) {
     if (!histories.has(row.mint_id)) {
       histories.set(row.mint_id, []);
     }
@@ -48,9 +38,24 @@ async function fetchTopStreams() {
       num_participants: row.num_participants,
       market_cap: row.market_cap,
     });
-  });
 
-  return { topStreams: latestRows, histories };
+    if (!latestByMint.has(row.mint_id)) {
+      latestByMint.set(row.mint_id, row);
+    }
+  }
+
+  const topStreams = Array.from(latestByMint.values())
+    .sort((a, b) => (b.num_participants ?? 0) - (a.num_participants ?? 0))
+    .slice(0, TOP_LIMIT);
+
+  for (const [mint, points] of histories.entries()) {
+    points.sort((a, b) => new Date(a.fetched_at).getTime() - new Date(b.fetched_at).getTime());
+    if (!latestByMint.has(mint)) {
+      histories.delete(mint);
+    }
+  }
+
+  return { topStreams, histories };
 }
 
 function computeDelta(points: SnapshotPoint[] | undefined, key: 'num_participants' | 'market_cap') {
