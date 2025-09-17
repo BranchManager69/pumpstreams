@@ -22,7 +22,7 @@ if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
   throw new Error(`Invalid poller interval: ${intervalMs}`);
 }
 
-const limit = Number(values.limit ?? optionalEnv('LIVE_POLLER_LIMIT', '50'));
+const limit = Number(values.limit ?? optionalEnv('LIVE_POLLER_LIMIT', '500'));
 if (!Number.isFinite(limit) || limit <= 0) {
   throw new Error(`Invalid poller limit: ${limit}`);
 }

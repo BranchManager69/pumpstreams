@@ -148,7 +148,7 @@ pm2 start ecosystem.config.cjs --only pumpstreams-live-poller
 
 # Override interval/limit at launch
 pm2 start ecosystem.config.cjs --only pumpstreams-live-poller \
-  --update-env --env LIVE_POLLER_INTERVAL_MS=15000 --env LIVE_POLLER_LIMIT=75
+  --update-env --env LIVE_POLLER_INTERVAL_MS=15000 --env LIVE_POLLER_LIMIT=250
 
 # Watch the output
 pm2 logs pumpstreams-live-poller
@@ -157,10 +157,15 @@ pm2 logs pumpstreams-live-poller
 The poller reads `.env.remote` first, so cloud writes are automatic. To target the local warehouse, start PM2 with
 `PUMPSTREAMS_ENV_FILE=.env.local` in the environment.
 
+Default PM2 settings monitor the top **500** Pump.fun livestreams on a 30-second cadence. Tune `LIVE_POLLER_LIMIT`
+or `LIVE_POLLER_INTERVAL_MS` if you need lighter sampling.
+
 ### Analytics Dashboard (Next.js + PM2)
 
-The repo ships with a self-hosted Next.js dashboard that surfaces the top 30 livestreams and their historical metrics.
-It listens on port **3050** by default.
+The repo ships with a self-hosted Next.js dashboard that surfaces the top 100 livestreams and their historical metrics.
+It listens on port **3050** by default and now presents a vertical leaderboard with live search, min-viewer filtering, and an
+"include inactive" toggle (helpful for keeping recent drop-offs visible). Infinite scroll lets you browse deeper into the
+buffer pulled from the 500-stream poller without overwhelming the initial view.
 
 ```bash
 # Install dependencies (first time only)
@@ -179,7 +184,8 @@ pm2 logs pumpstreams-dashboard
 ```
 
 The dashboard uses Supabase service-role credentials at runtime (sourced from `.env.remote`). Adjust
-`DASHBOARD_TOP_LIMIT`, `DASHBOARD_LOOKBACK_MINUTES`, or `DASHBOARD_STALE_THRESHOLD_MINUTES` to change the view. For local development:
+`DASHBOARD_TOP_LIMIT` (defaults to 100), `DASHBOARD_FETCH_LIMIT` (defaults to 500), `DASHBOARD_LOOKBACK_MINUTES`, or
+`DASHBOARD_STALE_THRESHOLD_MINUTES` to change the view. For local development:
 
 ````bash
 cd dashboard
@@ -218,6 +224,13 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `PUMPSTREAMS_LIVEKIT_EDGE` | `https://pump-prod-tg2x8veh.livekit.cloud` | Base URL queried for LiveKit regions |
 | `PUMPSTREAMS_ORIGIN` | `https://pump.fun` | Spoofed `Origin` header for REST requests |
 | `PUMPSTREAMS_REFERER` | `https://pump.fun/live` | Spoofed `Referer` header for REST requests |
+| `LIVE_POLLER_LIMIT` | `500` | Streams sampled each poller iteration (override PM2 default) |
+| `LIVE_POLLER_INTERVAL_MS` | `30000` | Polling cadence for `/live` roster |
+| `DASHBOARD_FETCH_LIMIT` | `500` | Latest snapshots pulled into the dashboard buffer |
+| `DASHBOARD_TOP_LIMIT` | `100` | Active streams rendered above the fold |
+| `DASHBOARD_LOOKBACK_MINUTES` | `180` | History range rendered in sparklines |
+| `DASHBOARD_STALE_THRESHOLD_MINUTES` | `10` | Minutes without updates before a stream is marked inactive |
+| `DASHBOARD_HISTORY_CHUNK_SIZE` | `100` | Batch size when fetching historical snapshots per Supabase request |
 
 Edit the config object in `monitor.mjs` for WebSocket behaviour:
 
@@ -305,4 +318,3 @@ Distributed under the [MIT License](LICENSE). Feel free to fork, extend, and bui
 - Convert Next.js dashboard top section into a vertical leaderboard with infinity scroll or pagination.
 - Introduce filters (min viewers, search by mint/name) and compare charts side by side.
 - Show still streams (inactive) with dimmed style and optional include toggle.
-

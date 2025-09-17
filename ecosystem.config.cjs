@@ -9,7 +9,7 @@ module.exports = {
       instances: 1,
       env: {
         LIVE_POLLER_INTERVAL_MS: '30000',
-        LIVE_POLLER_LIMIT: '50',
+        LIVE_POLLER_LIMIT: process.env.LIVE_POLLER_LIMIT || '500',
         PUMPSTREAMS_ENV_FILE: process.env.PUMPSTREAMS_ENV_FILE || '.env.remote',
       },
     },
@@ -24,7 +24,7 @@ module.exports = {
         PORT: process.env.PORT || '3050',
         SUPABASE_URL: process.env.SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        DASHBOARD_TOP_LIMIT: process.env.DASHBOARD_TOP_LIMIT || '30',
+        DASHBOARD_TOP_LIMIT: process.env.DASHBOARD_TOP_LIMIT || '100',
         DASHBOARD_LOOKBACK_MINUTES: process.env.DASHBOARD_LOOKBACK_MINUTES || '180',
       },
     },

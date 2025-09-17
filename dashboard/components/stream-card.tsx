@@ -1,12 +1,7 @@
 'use client';
 
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
-export type SnapshotPoint = {
-  fetched_at: string;
-  num_participants: number | null;
-  market_cap: number | null;
-};
+import type { SnapshotPoint } from '../lib/types';
 
 export type StreamCardProps = {
   rank: number;
@@ -18,6 +13,8 @@ export type StreamCardProps = {
   viewersChange?: number | null;
   marketCapChange?: number | null;
   snapshotHistory: SnapshotPoint[];
+  isStale: boolean;
+  latestAt: string | null;
 };
 
 function formatNumber(value: number | null | undefined, fractionDigits = 0) {
@@ -38,6 +35,35 @@ function formatCompact(value: number | null | undefined) {
   return value.toFixed(2);
 }
 
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+function formatRelativeToNow(value: string | null) {
+  if (!value) return '—';
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '—';
+  const diffMs = timestamp - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+  if (Math.abs(diffMinutes) < 1) {
+    const diffSeconds = Math.round(diffMs / 1000);
+    return relativeTime.format(diffSeconds, 'second');
+  }
+  if (Math.abs(diffMinutes) < 60) {
+    return relativeTime.format(diffMinutes, 'minute');
+  }
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) {
+    return relativeTime.format(diffHours, 'hour');
+  }
+  const diffDays = Math.round(diffHours / 24);
+  return relativeTime.format(diffDays, 'day');
+}
+
+function formatDelta(value: number | null | undefined, compact = false) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  const prefix = value > 0 ? '+' : '';
+  return compact ? `${prefix}${formatCompact(Math.abs(value))}` : `${prefix}${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}`;
+}
+
 export function StreamCard(props: StreamCardProps) {
   const history = props.snapshotHistory.map((point) => ({
     time: new Date(point.fetched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -45,30 +71,58 @@ export function StreamCard(props: StreamCardProps) {
     marketCap: point.market_cap ?? 0,
   }));
 
+  const latestParticipants = props.participants ?? null;
+  if (
+    latestParticipants !== null &&
+    latestParticipants !== undefined &&
+    (history.length === 0 || history.at(-1)?.participants !== latestParticipants)
+  ) {
+    history.push({
+      time: new Date(props.latestAt ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      participants: latestParticipants,
+      marketCap: props.marketCap ?? 0,
+    });
+  }
+
+  const deltaClass = (value: number | null | undefined) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '';
+    if (value > 0) return 'delta-positive';
+    if (value < 0) return 'delta-negative';
+    return '';
+  };
+
   return (
-    <div className="card">
-      <div className="card-header">
-        <div>
-          <div className="badge">#{props.rank}</div>
-          <div className="card-title">{props.name || 'Untitled Stream'}</div>
-          <div className="card-subtitle">{props.symbol || '—'} · {props.mintId.slice(0, 8)}...</div>
+    <div className={`stream-row${props.isStale ? ' stale' : ''}`}>
+      <div className="row-rank">
+        <div className="rank-pill">#{props.rank}</div>
+        <div className={`status-pill ${props.isStale ? 'inactive' : 'active'}`}>
+          {props.isStale ? 'Inactive' : 'Live'}
         </div>
       </div>
-
-      <div className="metric-row">
-        <div className="metric">
-          <span>Viewers</span>
-          <strong>{formatNumber(props.participants)}</strong>
-          <small>Δ {formatNumber(props.viewersChange, 1)}</small>
+      <div className="row-content">
+        <div className="row-header">
+          <div>
+            <div className="row-title">{props.name || 'Untitled Stream'}</div>
+            <div className="row-subtitle">{props.symbol || '—'} · {props.mintId.slice(0, 8)}...</div>
+          </div>
+          <div className="row-meta">
+            <span className="last-updated">Updated {formatRelativeToNow(props.latestAt)}</span>
+          </div>
         </div>
-        <div className="metric">
-          <span>Market Cap (SOL)</span>
-          <strong>{formatCompact(props.marketCap)}</strong>
-          <small>Δ {formatCompact(props.marketCapChange ?? 0)}</small>
+        <div className="row-metrics">
+          <div className="metric">
+            <span>Viewers</span>
+            <strong>{formatNumber(props.participants)}</strong>
+            <small className={deltaClass(props.viewersChange)}>Δ {formatDelta(props.viewersChange)}</small>
+          </div>
+          <div className="metric">
+            <span>Market Cap (SOL)</span>
+            <strong>{formatCompact(props.marketCap)}</strong>
+            <small className={deltaClass(props.marketCapChange)}>Δ {formatDelta(props.marketCapChange, true)}</small>
+          </div>
         </div>
       </div>
-
-      <div className="sparkline-wrapper">
+      <div className="row-chart">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={history} margin={{ left: 0, right: 0, top: 6, bottom: 0 }}>
             <defs>
