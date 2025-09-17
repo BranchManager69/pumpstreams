@@ -22,13 +22,21 @@ Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and
 git clone https://github.com/BranchManager69/pumpstreams.git
 cd pumpstreams
 npm install
-cp .env.example .env.local   # customise if you want a remote Supabase project
+
+# Local analytics (no cloud required)
+cp .env.example .env.local
 supabase start               # launches the bundled Supabase warehouse on high ports
+
+# Hosted analytics (optional)
+cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashboard
 ```
 
-The repo ships with a Supabase local stack pre-configured on high ports (`5542x`). The generated `.env.local`
-already contains the service role key for this local environment so every CLI persists data immediately.
-Replace those values with your remote Supabase credentials when you are ready to graduate to hosted infra.
+The repo supports two analytics back-ends out of the box:
+
+- **Local Supabase** – `supabase start` spins up a Postgres instance on ports `5542x`. Commands use it when
+  invoked normally (the default `.env.local`).
+- **Hosted Supabase Cloud** – point `.env.remote` at your production project, then prefix any command with
+  `PUMPSTREAMS_ENV_FILE=.env.remote` to run against the hosted warehouse.
 
 ## WebSocket Endpoint
 
@@ -105,10 +113,10 @@ directly into the analytics CLI: `npm run analyze -- --limit 10`.
 
 ```bash
 # Refresh hourly aggregates then dump the top streams as JSON
-npm run analyze -- --refresh --json
+PUMPSTREAMS_ENV_FILE=.env.local npm run analyze -- --refresh --json
 
 # Human-readable snapshot (top 10 by participants and trade flow)
-npm run analyze -- --limit 10
+PUMPSTREAMS_ENV_FILE=.env.remote npm run analyze -- --limit 10
 ```
 
 The analytics script pulls from the Supabase tables populated by the monitoring pipeline:
@@ -123,6 +131,8 @@ The analytics script pulls from the Supabase tables populated by the monitoring 
 | `token_hourly_metrics` | Rolling per-token hourly volume/bias metrics |
 
 Views such as `token_latest_snapshot`, `token_trade_summary`, and `token_hourly_trend` power the console output.
+
+> Tip: omit `PUMPSTREAMS_ENV_FILE=…` to use the default `.env.local` configuration.
 
 ## Testing
 
