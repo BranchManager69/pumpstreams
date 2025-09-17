@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import fs from 'fs/promises';
-import path from 'path';
 import { parseArgs } from 'util';
 import { getLivekitConnectionDetails, decodeJwt } from './lib/livestream-api.js';
+import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
 
 const { positionals, values } = parseArgs({
   options: {
@@ -139,47 +138,29 @@ async function main() {
 }
 
 async function outputSummary() {
+  const json = toJson(summary);
+
   if (outputTarget) {
-    const target = await resolveOutputPath();
-    await fs.writeFile(target, JSON.stringify(summary, null, 2));
+    const fileName = buildJsonFileName({
+      prefix: 'livekit',
+      label: summary.mintId,
+      fallbackLabel: 'mint',
+      timestamp: summary.sessionDurationMs ? new Date().toISOString() : summary.requestedAt,
+    });
+    const target = await resolveOutputTarget(outputTarget, fileName);
+    await writeJsonFile(target, summary);
     const msg = values.json ? `Summary saved to ${target}` : `LiveKit summary written to ${target}`;
     console.log(msg);
   }
 
   if (values.json) {
-    console.log(JSON.stringify(summary, null, 2));
+    console.log(json);
   } else if (!outputTarget) {
     console.log('\nLiveKit session summary:');
     console.log(`  Tracks observed: ${summary.tracks.length}`);
     console.log(`  Participants seen: ${Object.keys(summary.participants).length}`);
     console.log(`  Session duration: ${(summary.sessionDurationMs || 0) / 1000}s`);
   }
-}
-
-async function resolveOutputPath() {
-  const stats = await fs.stat(outputTarget).catch(() => null);
-  if (stats?.isDirectory() || outputTarget.endsWith(path.sep)) {
-    const dir = stats?.isDirectory() ? outputTarget : outputTarget.replace(/\/+$/, '');
-    if (!stats) {
-      await fs.mkdir(dir, { recursive: true });
-    }
-    const fileName = buildFileName();
-    return path.join(dir, fileName);
-  }
-
-  const dir = path.dirname(outputTarget);
-  if (dir && dir !== '.') {
-    await fs.mkdir(dir, { recursive: true }).catch(() => {});
-  }
-  return outputTarget;
-}
-
-function buildFileName() {
-  const mint = (summary.mintId || 'mint').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'mint';
-  const stamp = (summary.sessionDurationMs
-    ? new Date(Date.now()).toISOString()
-    : summary.requestedAt).replace(/[:.]/g, '-');
-  return `livekit-${mint}-${stamp}.json`;
 }
 
 function humanTrackKind(value) {

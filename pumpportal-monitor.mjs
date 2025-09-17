@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
 
 console.log('🚀 PUMPPORTAL WEBSOCKET MONITOR');
 console.log('================================');
@@ -89,10 +90,12 @@ ws.on('message', function message(data) {
       stats.trades++;
 
       // Only show large trades (> 1 SOL)
-      const solAmount = parsed.solAmount / 1e9;
+      const lamports = lamportsFrom(parsed.solAmount ?? parsed.sol_amount ?? '0');
+      const solAmount = lamportsToNumber(lamports);
       if (solAmount > 1) {
         const action = parsed.txType === 'buy' ? '🟢 BUY' : '🔴 SELL';
-        console.log(`\n${action}: ${solAmount.toFixed(2)} SOL`);
+        const formatted = formatSol(lamports, { decimals: 4 });
+        console.log(`\n${action}: ${formatted} SOL`);
         console.log(`   Token: ${parsed.name || 'Unknown'} (${parsed.symbol})`);
         console.log(`   Trader: ${parsed.traderPublicKey?.substring(0, 8)}...`);
       }

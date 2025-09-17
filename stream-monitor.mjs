@@ -1,5 +1,7 @@
 import WebSocket from 'ws';
 
+const SUBSCRIPTION_COOLDOWN_MS = 30_000;
+
 console.log('🎬 PUMP.FUN STREAMING WEBSOCKET MONITOR');
 console.log('========================================\n');
 
@@ -13,6 +15,7 @@ class StreamMonitor {
     this.url = url;
     this.ws = null;
     this.messages = [];
+    this.lastSent = new Map();
     this.connect();
   }
 
@@ -76,8 +79,9 @@ class StreamMonitor {
 
     subscriptions.forEach((sub, index) => {
       setTimeout(() => {
-        console.log(`   → Sending: ${sub}`);
-        this.ws.send(sub + '\r\n');
+        if (this.sendWithThrottle(`nats:${sub}`, `${sub}\r\n`)) {
+          console.log(`   → Sending: ${sub}`);
+        }
       }, index * 100);
     });
 
@@ -94,11 +98,24 @@ class StreamMonitor {
 
       jsonSubs.forEach((sub, index) => {
         setTimeout(() => {
-          console.log(`   → Sending JSON: ${JSON.stringify(sub)}`);
-          this.ws.send(JSON.stringify(sub));
+          const payload = JSON.stringify(sub);
+          if (this.sendWithThrottle(`json:${payload}`, payload)) {
+            console.log(`   → Sending JSON: ${payload}`);
+          }
         }, index * 100);
       });
     }, 2000);
+  }
+
+  sendWithThrottle(key, message) {
+    const now = Date.now();
+    const last = this.lastSent.get(key) || 0;
+    if (now - last < SUBSCRIPTION_COOLDOWN_MS) {
+      return false;
+    }
+    this.lastSent.set(key, now);
+    this.ws?.send(message);
+    return true;
   }
 
   getStatus() {

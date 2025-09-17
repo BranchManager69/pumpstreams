@@ -1,6 +1,7 @@
 import io from 'socket.io-client';
 import fs from 'fs/promises';
 import path from 'path';
+import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
 
 const PUMP_FUN_WS = 'https://frontend-api-v3.pump.fun';
 const ORIGIN = 'https://pump.fun';
@@ -25,6 +26,7 @@ const stats = {
   uniqueUsers: new Set(),
   uniqueMints: new Set(),
   largestTrade: null,
+  largestTradeLamports: 0n,
   tokenStats: new Map(), // Track per-token statistics
 };
 
@@ -39,11 +41,6 @@ async function initLogging() {
       config.logToFile = false;
     }
   }
-}
-
-// Format SOL amount (divide by 10^9 for lamports to SOL)
-function formatSol(lamports) {
-  return (Number(lamports) / 1e9).toFixed(6);
 }
 
 // Format token amount with dynamic decimals
@@ -61,8 +58,8 @@ function processTrade(trade) {
   stats.uniqueUsers.add(trade.user);
   stats.uniqueMints.add(trade.mint);
 
-  const solAmount = BigInt(trade.sol_amount);
-  stats.totalSolVolume += solAmount;
+  const solLamports = lamportsFrom(trade.sol_amount);
+  stats.totalSolVolume += solLamports;
 
   if (trade.is_buy) {
     stats.buys++;
@@ -86,7 +83,7 @@ function processTrade(trade) {
 
   const tokenStat = stats.tokenStats.get(trade.mint);
   tokenStat.trades++;
-  tokenStat.volume += solAmount;
+  tokenStat.volume += solLamports;
   tokenStat.lastTrade = new Date();
   if (trade.is_buy) {
     tokenStat.buys++;
@@ -95,13 +92,15 @@ function processTrade(trade) {
   }
 
   // Track largest trade
-  if (!stats.largestTrade || solAmount > BigInt(stats.largestTrade.sol_amount)) {
+  if (!stats.largestTrade || solLamports > lamportsFrom(stats.largestTrade.sol_amount)) {
     stats.largestTrade = trade;
+    stats.largestTradeLamports = solLamports;
   }
 
   // Format and display trade
-  const solFormatted = formatSol(trade.sol_amount);
-  const shouldShow = Number(solFormatted) >= config.minSolAmount &&
+  const solFormatted = formatSol(solLamports);
+  const solNumeric = lamportsToNumber(solLamports);
+  const shouldShow = solNumeric >= config.minSolAmount &&
                      ((trade.is_buy && config.showBuys) || (!trade.is_buy && config.showSells));
 
   if (shouldShow || config.trackSpecificMints.includes(trade.mint)) {
@@ -119,7 +118,9 @@ function processTrade(trade) {
       fs.appendFile(logFile, JSON.stringify({
         ...trade,
         timestamp: new Date().toISOString(),
-        solFormatted: Number(solFormatted),
+        solLamports: solLamports.toString(),
+        sol: solNumeric,
+        solFormatted,
       }) + '\n').catch(console.error);
     }
   }
@@ -138,28 +139,40 @@ function displayStats() {
 
   console.log(`⏱️  Runtime: ${hours}h ${minutes}m ${seconds}s`);
   console.log(`📈 Total Trades: ${stats.totalTrades.toLocaleString()}`);
-  console.log(`   ├─ Buys: ${stats.buys.toLocaleString()} (${((stats.buys / stats.totalTrades) * 100).toFixed(1)}%)`);
-  console.log(`   └─ Sells: ${stats.sells.toLocaleString()} (${((stats.sells / stats.totalTrades) * 100).toFixed(1)}%)`);
-  console.log(`💰 Total Volume: ${formatSol(stats.totalSolVolume.toString())} SOL`);
+
+  if (stats.totalTrades === 0) {
+    console.log('   Waiting for first trade...');
+  } else {
+    const buyPercent = ((stats.buys * 100) / stats.totalTrades).toFixed(1);
+    const sellPercent = ((stats.sells * 100) / stats.totalTrades).toFixed(1);
+    console.log(`   ├─ Buys: ${stats.buys.toLocaleString()} (${buyPercent}%)`);
+    console.log(`   └─ Sells: ${stats.sells.toLocaleString()} (${sellPercent}%)`);
+  }
+
+  console.log(`💰 Total Volume: ${formatSol(stats.totalSolVolume)} SOL`);
   console.log(`👥 Unique Users: ${stats.uniqueUsers.size.toLocaleString()}`);
   console.log(`🪙 Unique Tokens: ${stats.uniqueMints.size.toLocaleString()}`);
 
   if (stats.largestTrade) {
-    console.log(`\n🏆 Largest Trade: ${formatSol(stats.largestTrade.sol_amount)} SOL`);
+    const largestLamports = stats.largestTradeLamports ?? lamportsFrom(stats.largestTrade.sol_amount);
+    console.log(`\n🏆 Largest Trade: ${formatSol(largestLamports)} SOL`);
     console.log(`   Token: ${stats.largestTrade.name || 'Unknown'}`);
     console.log(`   Type: ${stats.largestTrade.is_buy ? 'BUY' : 'SELL'}`);
   }
 
   // Top 5 most traded tokens
   const topTokens = Array.from(stats.tokenStats.entries())
-    .sort((a, b) => Number(b[1].volume - a[1].volume))
+    .sort((a, b) => {
+      if (b[1].volume === a[1].volume) return 0;
+      return b[1].volume > a[1].volume ? 1 : -1;
+    })
     .slice(0, 5);
 
   if (topTokens.length > 0) {
     console.log('\n🔥 TOP 5 TOKENS BY VOLUME:');
     topTokens.forEach(([mint, data], index) => {
       console.log(`${index + 1}. ${data.name || 'Unknown'} (${mint.slice(0, 8)}...)`);
-      console.log(`   Volume: ${formatSol(data.volume.toString())} SOL | Trades: ${data.trades} | B/S: ${data.buys}/${data.sells}`);
+      console.log(`   Volume: ${formatSol(data.volume)} SOL | Trades: ${data.trades} | B/S: ${data.buys}/${data.sells}`);
     });
   }
 

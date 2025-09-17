@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import fs from 'fs/promises';
 import { parseArgs } from 'util';
-import path from 'path';
 import { getCurrentlyLive, getLivestreamSnapshot, getJoinToken, decodeJwt, getLivekitRegions } from './lib/livestream-api.js';
+import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
 
 const commands = ['list', 'info', 'join', 'regions', 'help'];
 
@@ -209,49 +208,24 @@ async function handleRegions(mintId) {
 async function maybeEmitJson(payload) {
   if (!payload) return;
 
-  const json = JSON.stringify(payload, null, 2);
+  const fileName = buildJsonFileName({
+    prefix: command,
+    label: payload?.mintId || payload?.snapshot?.mintId || payload?.streams?.[0]?.mint,
+    fallbackLabel: 'mint',
+    timestamp: payload?.fetchedAt,
+  });
 
-  const targetPath = await resolveOutputPath(payload);
+  const targetPath = await resolveOutputTarget(outputPath, fileName);
 
   if (targetPath) {
-    await fs.writeFile(targetPath, json);
+    await writeJsonFile(targetPath, payload);
     const message = values.json ?
       `JSON saved to ${targetPath}` :
       `JSON written to ${targetPath}`;
     console.log(message);
   } else if (values.json) {
-    console.log(json);
+    console.log(toJson(payload));
   }
-}
-
-async function resolveOutputPath(payload) {
-  if (!outputPath) return null;
-
-  const stats = await fs.stat(outputPath).catch(() => null);
-
-  if (stats?.isDirectory()) {
-    return path.join(outputPath, buildFileName(payload));
-  }
-
-  if (outputPath.endsWith(path.sep)) {
-    await fs.mkdir(outputPath, { recursive: true });
-    return path.join(outputPath, buildFileName(payload));
-  }
-
-  const dir = path.dirname(outputPath);
-  if (dir && dir !== '.') {
-    await fs.mkdir(dir, { recursive: true }).catch(() => {});
-  }
-
-  return outputPath;
-}
-
-function buildFileName(payload) {
-  const label = payload?.mintId || payload?.snapshot?.mintId || payload?.streams?.[0]?.mint || 'output';
-  const stamp = payload?.fetchedAt || new Date().toISOString();
-  const safeLabel = String(label).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'mint';
-  const safeStamp = stamp.replace(/[:.]/g, '-');
-  return `${command}-${safeLabel}-${safeStamp}.json`;
 }
 
 function formatNumber(value, unit = 'SOL') {

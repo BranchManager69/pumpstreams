@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import io from 'socket.io-client';
 import { parseArgs } from 'util';
+import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
 
 // Parse command line arguments
 const { values: options } = parseArgs({
@@ -63,15 +64,10 @@ const stats = {
   trades: 0,
   buys: 0,
   sells: 0,
-  volume: 0,
+  volumeLamports: 0n,
   tokens: new Map(),
   users: new Map(),
 };
-
-// Utility functions
-function formatSol(lamports) {
-  return (Number(lamports) / 1e9).toFixed(6);
-}
 
 function formatTokenAmount(amount) {
   const num = Number(amount);
@@ -83,11 +79,12 @@ function formatTokenAmount(amount) {
 }
 
 function shouldShowTrade(trade) {
-  const solAmount = formatSol(trade.sol_amount);
+  const lamports = lamportsFrom(trade.sol_amount);
+  const solAmount = lamportsToNumber(lamports);
 
   // Apply filters
-  if (Number(solAmount) < minSol) return false;
-  if (largeTradesOnly && Number(solAmount) < 10) return false;
+  if (solAmount < minSol) return false;
+  if (largeTradesOnly && solAmount < 10) return false;
   if (targetToken && trade.mint !== targetToken) return false;
   if (targetUser && trade.user !== targetUser) return false;
   if (buysOnly && !trade.is_buy) return false;
@@ -97,7 +94,8 @@ function shouldShowTrade(trade) {
 }
 
 function displayTrade(trade) {
-  const solAmount = formatSol(trade.sol_amount);
+  const lamports = lamportsFrom(trade.sol_amount);
+  const solAmount = formatSol(lamports);
 
   if (rawMode) {
     console.log(JSON.stringify(trade));
@@ -135,8 +133,10 @@ function displayTrade(trade) {
 }
 
 function updateStats(trade) {
+  const lamports = lamportsFrom(trade.sol_amount);
+
   stats.trades++;
-  stats.volume += Number(formatSol(trade.sol_amount));
+  stats.volumeLamports += lamports;
 
   if (trade.is_buy) {
     stats.buys++;
@@ -147,58 +147,64 @@ function updateStats(trade) {
   // Track token stats
   const tokenKey = `${trade.mint}:${trade.name || 'Unknown'}`;
   if (!stats.tokens.has(tokenKey)) {
-    stats.tokens.set(tokenKey, { trades: 0, volume: 0, buys: 0, sells: 0 });
+    stats.tokens.set(tokenKey, { trades: 0, volumeLamports: 0n, buys: 0, sells: 0 });
   }
   const tokenStat = stats.tokens.get(tokenKey);
   tokenStat.trades++;
-  tokenStat.volume += Number(formatSol(trade.sol_amount));
+  tokenStat.volumeLamports += lamports;
   if (trade.is_buy) tokenStat.buys++;
   else tokenStat.sells++;
 
   // Track user stats
   if (!stats.users.has(trade.user)) {
-    stats.users.set(trade.user, { trades: 0, volume: 0 });
+    stats.users.set(trade.user, { trades: 0, volumeLamports: 0n });
   }
   const userStat = stats.users.get(trade.user);
   userStat.trades++;
-  userStat.volume += Number(formatSol(trade.sol_amount));
+  userStat.volumeLamports += lamports;
 }
 
 function showStats() {
   const runtime = Math.floor((Date.now() - stats.startTime) / 1000);
-  const tradesPerSecond = (stats.trades / runtime).toFixed(2);
+  const tradesPerSecond = runtime > 0 ? (stats.trades / runtime).toFixed(2) : '0.00';
 
   console.clear();
   console.log('═'.repeat(60));
   console.log('PUMPSTREAMS LIVE STATISTICS');
   console.log('═'.repeat(60));
-  console.log(`Runtime: ${runtime}s | TPS: ${tradesPerSecond}`);
+  console.log(`Runtime: ${runtime}s | TPS: ${runtime > 0 ? tradesPerSecond : 'warming up'}`);
   console.log(`Trades: ${stats.trades} | Buys: ${stats.buys} | Sells: ${stats.sells}`);
-  console.log(`Volume: ${stats.volume.toFixed(2)} SOL`);
+  console.log(`Volume: ${formatSol(stats.volumeLamports)} SOL`);
   console.log(`Unique Tokens: ${stats.tokens.size} | Unique Users: ${stats.users.size}`);
 
   // Top tokens
   const topTokens = Array.from(stats.tokens.entries())
-    .sort((a, b) => b[1].volume - a[1].volume)
+    .sort((a, b) => {
+      if (b[1].volumeLamports === a[1].volumeLamports) return 0;
+      return b[1].volumeLamports > a[1].volumeLamports ? 1 : -1;
+    })
     .slice(0, 5);
 
   if (topTokens.length > 0) {
     console.log('\nTop Tokens by Volume:');
     topTokens.forEach(([key, data], i) => {
       const [mint, name] = key.split(':');
-      console.log(`${i + 1}. ${name} - ${data.volume.toFixed(2)} SOL (${data.trades} trades)`);
+      console.log(`${i + 1}. ${name} - ${formatSol(data.volumeLamports)} SOL (${data.trades} trades)`);
     });
   }
 
   // Top traders
   const topUsers = Array.from(stats.users.entries())
-    .sort((a, b) => b[1].volume - a[1].volume)
+    .sort((a, b) => {
+      if (b[1].volumeLamports === a[1].volumeLamports) return 0;
+      return b[1].volumeLamports > a[1].volumeLamports ? 1 : -1;
+    })
     .slice(0, 3);
 
   if (topUsers.length > 0) {
     console.log('\nTop Traders:');
     topUsers.forEach(([user, data], i) => {
-      console.log(`${i + 1}. ${user.slice(0, 8)}... - ${data.volume.toFixed(2)} SOL (${data.trades} trades)`);
+      console.log(`${i + 1}. ${user.slice(0, 8)}... - ${formatSol(data.volumeLamports)} SOL (${data.trades} trades)`);
     });
   }
 }
@@ -256,7 +262,7 @@ process.on('SIGINT', () => {
   if (!csvMode && !rawMode) {
     console.log('\n\nFinal Statistics:');
     console.log(`Total Trades: ${stats.trades}`);
-    console.log(`Total Volume: ${stats.volume.toFixed(2)} SOL`);
+    console.log(`Total Volume: ${formatSol(stats.volumeLamports)} SOL`);
     console.log(`Buy/Sell Ratio: ${stats.buys}/${stats.sells}`);
   }
   socket.close();

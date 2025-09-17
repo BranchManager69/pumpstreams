@@ -91,7 +91,13 @@ npm run subscribe -- --mint <mint> --duration 20
 
 ## Testing
 
-The test suite talks to the public pump.fun APIs—no mocks, no fixtures. Keep usage polite and trim the roster size when needed:
+Start with the offline helper sanity check (uses recorded fixtures, no network calls):
+
+```bash
+node --test tests/helpers-offline.test.mjs
+```
+
+Live endpoint coverage still exercises the public pump.fun APIs—no mocks. Keep usage polite and trim the roster size when needed:
 
 ```bash
 # Quick smoke check (limit 1 stream, 30s timeout)
@@ -137,7 +143,7 @@ Each `tradeCreated` event contains:
 ```javascript
 {
   "signature": "transaction_signature",
-  "sol_amount": 123456789,        // in lamports (divide by 1e9 for SOL)
+  "sol_amount": 123456789,        // in lamports (use lib/token-math.js helpers for SOL conversions)
   "token_amount": 999999999999,    // raw token amount
   "is_buy": true,                  // true=buy, false=sell
   "user": "wallet_address",

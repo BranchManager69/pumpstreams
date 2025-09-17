@@ -1,0 +1,11 @@
+{
+  "signature": "5p1TqQnYrZ5wQ9ZV3sD2vY6aHQpS5P3vmt8NhVbgSsPgV8kN3S8TGbRZvQ8oJYa1SwBWiP9oEzqkud7d1Xj73r4P",
+  "slot": 278905432,
+  "is_buy": true,
+  "mint": "V5cCiSixPLAiEDX2zZquT5VuLm4prr5t35PWmjNpump",
+  "user": "8PQxd6VmfGPMyg8WPnfkT9jUTmtE7UsnDmvBKXeAVP9z",
+  "sol_amount": "3456789012",
+  "token_amount": "1234567890000",
+  "name": "Sample Stream Token",
+  "symbol": "SAS"
+}

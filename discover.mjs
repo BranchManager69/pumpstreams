@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 
 const PUMP_FUN_WS = 'https://frontend-api-v3.pump.fun';
 const ORIGIN = 'https://pump.fun';
+const SUBSCRIPTION_COOLDOWN_MS = 30_000;
 
 console.log('🔍 PUMP.FUN WEBSOCKET DISCOVERY TOOL');
 console.log('=====================================');
@@ -17,6 +18,35 @@ const socket = io(PUMP_FUN_WS, {
 const discoveredEvents = new Map();
 const eventSamples = new Map();
 let totalEvents = 0;
+const subscriptionAttempts = new Map();
+
+function serializePayload(payload) {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object') {
+    const sorted = Object.fromEntries(Object.entries(payload).sort(([a], [b]) => a.localeCompare(b)));
+    return JSON.stringify(sorted);
+  }
+  return String(payload);
+}
+
+function emitWithThrottle(action, payload) {
+  const key = `${action}:${serializePayload(payload)}`;
+  const now = Date.now();
+  const last = subscriptionAttempts.get(key) || 0;
+  if (now - last < SUBSCRIPTION_COOLDOWN_MS) {
+    return false;
+  }
+  subscriptionAttempts.set(key, now);
+  socket.emit(action, payload);
+  return true;
+}
+
+function describeEmit(action, payload) {
+  const descriptor = typeof payload === 'string'
+    ? `'${payload}'`
+    : JSON.stringify(payload);
+  return `   Trying: socket.emit('${action}', ${descriptor})`;
+}
 
 // Track ALL events
 socket.onAny((eventName, ...args) => {
@@ -85,15 +115,22 @@ socket.on('connect', () => {
     '*',
   ];
 
-  subscriptions.forEach(sub => {
-    console.log(`   Trying: socket.emit('subscribe', '${sub}')`);
-    socket.emit('subscribe', sub);
-    socket.emit('subscribe', { channel: sub });
-    socket.emit('subscribe', { type: sub });
-    socket.emit('subscribe', { event: sub });
-    socket.emit('join', sub);
-    socket.emit('join', { room: sub });
-    socket.emit('watch', sub);
+  subscriptions.forEach((sub) => {
+    const attempts = [
+      ['subscribe', sub],
+      ['subscribe', { channel: sub }],
+      ['subscribe', { type: sub }],
+      ['subscribe', { event: sub }],
+      ['join', sub],
+      ['join', { room: sub }],
+      ['watch', sub],
+    ];
+
+    attempts.forEach(([action, payload]) => {
+      if (emitWithThrottle(action, payload)) {
+        console.log(describeEmit(action, payload));
+      }
+    });
   });
 
   // Also try without any subscription to see what comes by default
