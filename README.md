@@ -135,6 +135,28 @@ Views such as `token_latest_snapshot`, `token_trade_summary`, and `token_hourly_
 > Tip: omit `PUMPSTREAMS_ENV_FILE=…` to use the default `.env.remote` configuration; set
 > `PUMPSTREAMS_ENV_FILE=.env.local` when you want the bundled local stack.
 
+### Live Roster Poller
+
+Keep Supabase stocked with the `/live` roster by running the poller loop.
+
+```bash
+# Smoke test (single iteration)
+npm run poller -- --iterations 1 --limit 10
+
+# Continuous polling every 30s via PM2 (cloud by default)
+pm2 start ecosystem.config.cjs --only pumpstreams-live-poller
+
+# Override interval/limit at launch
+pm2 start ecosystem.config.cjs --only pumpstreams-live-poller \
+  --update-env --env LIVE_POLLER_INTERVAL_MS=15000 --env LIVE_POLLER_LIMIT=75
+
+# Watch the output
+pm2 logs pumpstreams-live-poller
+```
+
+The poller reads `.env.remote` first, so cloud writes are automatic. To target the local warehouse, start PM2 with
+`PUMPSTREAMS_ENV_FILE=.env.local` in the environment.
+
 ## Testing
 
 Start with the offline helper sanity check (uses recorded fixtures, no network calls):
