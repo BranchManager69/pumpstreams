@@ -35,7 +35,7 @@ begin
     min(observed_at) as first_seen_at,
     max(observed_at) as last_seen_at
   from public.trade_events t
-  where t.observed_at >= now() - interval '7 days'
+  where t.observed_at >= now() - interval '1 hour'
   group by t.mint_id;
 end;
 $$;
