@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import './lib/env.js';
+import '../lib/env.js';
 import { parseArgs } from 'util';
-import { getCurrentlyLive, getLivestreamSnapshot, getJoinToken, decodeJwt, getLivekitRegions } from './lib/livestream-api.js';
-import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
-import { persistLivestreamSnapshot, persistLivestreamRegions, persistLiveRoster } from './lib/supabase-storage.js';
+import { getCurrentlyLive, getLivestreamSnapshot, getJoinToken, decodeJwt, getLivekitRegions } from '../lib/livestream-api.js';
+import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from '../lib/io-utils.js';
+import { persistLivestreamSnapshot, persistLivestreamRegions, persistLiveRoster } from '../lib/supabase-storage.js';
 
 const commands = ['list', 'info', 'join', 'regions', 'help'];
 
@@ -30,7 +30,7 @@ if (!commands.includes(command)) {
 function printHelp() {
   console.log(`Pump.fun Livestream CLI
 
-Usage: node livestream-cli.mjs <command> [options]
+Usage: npm run live -- <command> [options]
 
 Commands:
   list                 Show currently live tokens with headline stats

@@ -31,6 +31,16 @@ supabase start               # launches the bundled Supabase warehouse on high p
 cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashboard
 ```
 
+## Documentation
+
+- Build the self-hosted GitBook-style site with `npm run docs:build` (output in `docs/_book/`)
+- Preview locally on this server with `npm run docs:serve` (defaults to port 3052)
+- Deploy the latest build to `docs.dexter.cash` with `npm run docs:deploy` (renders + rsyncs to `/var/www/docs.dexter.cash/`)
+- Publish by pointing your web server or reverse proxy at the `docs/_book/` directory—perfect for a `docs.<domain>` subdomain
+- Add or reorder pages by editing Markdown inside `docs/` and updating `docs/SUMMARY.md`
+
+> Tip: run `tools/install-docs-hook.sh` once on the server so every commit to `main` that touches `docs/` or `README.md` auto-runs `npm run docs:deploy`.
+
 The repo supports two analytics back-ends out of the box:
 
 - **Hosted Supabase Cloud (default)** – commands look for `.env.remote` first. With the supplied file in
@@ -45,6 +55,8 @@ The repo supports two analytics back-ends out of the box:
 
 ## CLI & Automation Toolkit
 
+All entry points share a single dispatcher. Run `npm run cli -- --help` to see every command and alias.
+
 ### WebSocket Monitors
 
 ```bash
@@ -55,7 +67,7 @@ npm run ws-test
 npm run monitor
 ```
 
-### Advanced Trade Explorer (`advanced.mjs`)
+### Advanced Trade Explorer (`cli/advanced.mjs`)
 
 ```bash
 npm run advanced -- --help
@@ -64,7 +76,7 @@ npm run advanced -- --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
 npm run advanced -- --csv > trades.csv
 ```
 
-### Livestream Catalogue (`livestream-cli.mjs`)
+### Livestream Catalogue (`cli/livestream-cli.mjs`)
 
 ```bash
 # Top live streams with viewer counts + market caps
@@ -86,7 +98,7 @@ npm run live -- list --json
 npm run live -- info <mint> --json --output dumps/ && npm run analyze -- --limit 5
 ```
 
-### Live Investigator (`live-investigator.mjs`)
+### Live Investigator (`cli/live-investigator.mjs`)
 Headless Puppeteer reconnaissance that captures screenshots, DOM summaries, WebSocket frames, and REST payloads powering `pump.fun/live`.
 
 Artifacts (HTML snapshot, JSON logs, PNG screenshots) are saved under `artifacts/<timestamp>/` for further analysis:
@@ -95,7 +107,7 @@ Artifacts (HTML snapshot, JSON logs, PNG screenshots) are saved under `artifacts
 npm run investigate
 ```
 
-### LiveKit Subscriber (`livekit-subscriber.mjs`)
+### LiveKit Subscriber (`cli/livekit-subscriber.mjs`)
 Connects to a livestream room with the issued viewer token, listens for participants and tracks, and captures a structured session summary.
 
 ```bash
@@ -144,14 +156,14 @@ Keep Supabase stocked with the `/live` roster by running the poller loop.
 npm run poller -- --iterations 1 --limit 10
 
 # Continuous polling every 30s via PM2 (cloud by default)
-pm2 start ecosystem.config.cjs --only pumpstreams-live-poller
+pm2 start ecosystem.config.cjs --only pumpstreams-api
 
 # Override interval/limit at launch
-pm2 start ecosystem.config.cjs --only pumpstreams-live-poller \
+pm2 start ecosystem.config.cjs --only pumpstreams-api \
   --update-env --env LIVE_POLLER_INTERVAL_MS=15000 --env LIVE_POLLER_LIMIT=250
 
 # Watch the output
-pm2 logs pumpstreams-live-poller
+pm2 logs pumpstreams-api
 ```
 
 The poller reads `.env.remote` first, so cloud writes are automatic. To target the local warehouse, start PM2 with
@@ -177,10 +189,10 @@ set -a && source ../.env.remote && npm run build
 
 # Start under PM2 (from repo root)
 cd ..
-pm2 start ecosystem.config.cjs --only pumpstreams-dashboard
+pm2 start ecosystem.config.cjs --only pumpstreams-fe
 
 # Tail the logs
-pm2 logs pumpstreams-dashboard
+pm2 logs pumpstreams-fe
 ```
 
 The dashboard uses Supabase service-role credentials at runtime (sourced from `.env.remote`). Adjust
@@ -249,7 +261,7 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
 | `DASHBOARD_HISTORY_MAX_POINTS` | `120` | Maximum number of points kept per sparkline history |
 
-Edit the config object in `monitor.mjs` for WebSocket behaviour:
+Edit the config object in `cli/monitor.mjs` for WebSocket behaviour:
 
 ```javascript
 const config = {
@@ -355,3 +367,11 @@ This repository is ready for [OpenAI Codex Cloud environments](https://developer
 - **Ports** – production uses port `3050`. When you run `npm run dev` in Codex
   (for HMR), choose an alternate port (`npm run dev -- --port 3051`) to avoid
   conflicts.
+
+## Recon Playground Scripts
+
+Older exploratory utilities (Socket.IO discovery, Puppeteer sniffers, experimental monitors) now live in `tools/`. They’re unsupported but kept around for manual poking.
+
+## Additional Docs
+
+- `docs/WEBSOCKET-ENDPOINTS.md` – most recently captured Pump.fun WebSocket and REST endpoints. Regenerate by running `npm run investigate` and updating the doc if APIs shift.

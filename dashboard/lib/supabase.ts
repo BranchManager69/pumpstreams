@@ -8,7 +8,13 @@ export function getServiceClient() {
     throw new Error('Supabase environment variables are not set. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
   }
 
+  const fetchNoStore: typeof fetch = (input, init) => {
+    const nextInit = { ...init, cache: 'no-store' as const };
+    return fetch(input, nextInit);
+  };
+
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
+    global: { fetch: fetchNoStore },
   });
 }

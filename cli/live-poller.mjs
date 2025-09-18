@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import './lib/env.js';
+import '../lib/env.js';
 import { parseArgs } from 'util';
-import { getCurrentlyLive } from './lib/livestream-api.js';
-import { persistLiveRoster } from './lib/supabase-storage.js';
-import { buildJsonFileName, resolveOutputTarget, writeJsonFile } from './lib/io-utils.js';
-import { optionalEnv } from './lib/env.js';
+import { getCurrentlyLive } from '../lib/livestream-api.js';
+import { persistLiveRoster } from '../lib/supabase-storage.js';
+import { buildJsonFileName, resolveOutputTarget, writeJsonFile } from '../lib/io-utils.js';
+import { optionalEnv } from '../lib/env.js';
 
 const { values } = parseArgs({
   options: {

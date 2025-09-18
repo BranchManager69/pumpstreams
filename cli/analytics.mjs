@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import './lib/env.js';
+import '../lib/env.js';
 import { parseArgs } from 'util';
-import { hasSupabase, getSupabase } from './lib/supabase-client.js';
-import { lamportsFrom, formatSol } from './lib/token-math.js';
+import { hasSupabase, getSupabase } from '../lib/supabase-client.js';
+import { lamportsFrom, formatSol } from '../lib/token-math.js';
 
 const { values } = parseArgs({
   options: {
@@ -22,13 +22,34 @@ const supabase = getSupabase();
 const limit = Number(values.limit) || 10;
 
 async function fetchCurrentLivestreams() {
-  const { data, error } = await supabase
-    .from('token_latest_snapshot')
-    .select('*')
-    .order('num_participants', { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(`Failed to fetch livestream snapshots: ${error.message}`);
-  return data ?? [];
+  const sources = ['livestream_latest', 'token_latest_snapshot'];
+  let lastError = null;
+
+  for (const source of sources) {
+    const { data, error } = await supabase
+      .from(source)
+      .select('*')
+      .order('num_participants', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      // 42P01 = relation does not exist; try the next candidate.
+      if (error.code !== '42P01') {
+        lastError = error;
+      }
+      continue;
+    }
+
+    if (data?.length) {
+      return data;
+    }
+  }
+
+  if (lastError) {
+    throw new Error(`Failed to fetch livestream snapshots: ${lastError.message}`);
+  }
+
+  return [];
 }
 
 async function fetchTradeSummary() {

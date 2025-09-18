@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import './lib/env.js';
+import '../lib/env.js';
 import io from 'socket.io-client';
 import { parseArgs } from 'util';
-import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
-import { persistTradeEvent, flushSupabaseQueues } from './lib/supabase-storage.js';
+import { formatSol, lamportsFrom, lamportsToNumber } from '../lib/token-math.js';
+import { persistTradeEvent, flushSupabaseQueues } from '../lib/supabase-storage.js';
 
 // Parse command line arguments
 const { values: options } = parseArgs({
@@ -27,7 +27,7 @@ if (options.help) {
   console.log(`
 PumpStreams - Advanced WebSocket Monitor for Pump.fun
 
-Usage: node advanced.mjs [options]
+Usage: npm run advanced -- [options]
 
 Options:
   --min-sol <amount>    Minimum SOL amount to display (default: 0.1)
@@ -42,9 +42,9 @@ Options:
   --help               Show this help message
 
 Examples:
-  node advanced.mjs --min-sol 1 --buys-only
-  node advanced.mjs --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
-  node advanced.mjs --large-trades --csv > trades.csv
+  npm run advanced -- --min-sol 1 --buys-only
+  npm run advanced -- --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
+  npm run advanced -- --large-trades --csv > trades.csv
   `);
   process.exit(0);
 }

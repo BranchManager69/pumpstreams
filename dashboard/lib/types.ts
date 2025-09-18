@@ -4,16 +4,40 @@ export type SnapshotPoint = {
   market_cap: number | null;
 };
 
-export type SerializableStream = {
+export type StreamStatus = 'live' | 'cooldown' | 'ended' | 'archived';
+
+export type StreamMomentumMetrics = {
+  delta5m: number | null;
+  delta15m: number | null;
+  velocityPerMin: number | null;
+};
+
+export type StreamMetrics = {
+  lastSnapshotAgeSeconds: number | null;
+  viewers: {
+    current: number | null;
+    peak: number | null;
+    momentum: StreamMomentumMetrics;
+  };
+  marketCap: {
+    current: number | null;
+    momentum: StreamMomentumMetrics;
+  };
+};
+
+export type DashboardStream = {
   mintId: string;
   name: string | null;
   symbol: string | null;
-  latest: {
-    fetchedAt: string | null;
-    numParticipants: number | null;
-    marketCap: number | null;
-    thumbnail: string | null;
+  thumbnail: string | null;
+  status: StreamStatus;
+  latestAt: string | null;
+  metrics: StreamMetrics;
+  sparkline: SnapshotPoint[];
+  score: number;
+  livestreamMeta: {
+    isCurrentlyLive: boolean | null;
+    isComplete: boolean | null;
+    totalSupply: number | null;
   } | null;
-  history: SnapshotPoint[];
-  isStale: boolean;
 };

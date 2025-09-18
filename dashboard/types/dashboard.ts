@@ -1,13 +1,27 @@
-import type { SerializableStream } from '../lib/types';
+import type { DashboardStream } from '../lib/types';
 
 export type DashboardTotals = {
-  activeCount: number;
-  inactiveCount: number;
-  totalViewers: number;
-  totalMarketCap: number;
+  totalStreams: number;
+  liveStreams: number;
+  coolingStreams: number;
+  endedStreams: number;
+  totalLiveViewers: number;
+  totalLiveMarketCap: number;
+};
+
+export type DashboardEvent = {
+  mintId: string;
+  type: 'drop' | 'surge';
+  message: string;
+  severity: 'info' | 'warning';
+  timestamp: string | null;
 };
 
 export type DashboardPayload = {
-  entries: SerializableStream[];
+  generatedAt: string;
+  windowMinutes: number;
+  streams: DashboardStream[];
+  spotlight: DashboardStream[];
   totals: DashboardTotals;
+  events: DashboardEvent[];
 };

@@ -1,18 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { SerializableStream } from '../lib/types';
-import type { DashboardPayload, DashboardTotals } from '../types/dashboard';
-import { StreamLeaderboard } from './stream-leaderboard';
+import type { DashboardPayload } from '../types/dashboard';
+import type { DashboardStream, StreamStatus } from '../lib/types';
+import { LiveLeaderboard } from './stream-leaderboard';
+import { SpotlightReel } from './spotlight-reel';
+import { OctoboxDock } from './octobox-dock';
+import { CriticalEventsBar } from './critical-events';
 
 const REFRESH_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS ?? '20000');
+const OCTOBOX_SLOTS = 8;
 
 export type DashboardLiveProps = {
-  initialEntries: SerializableStream[];
-  initialTotals: DashboardTotals;
-  topLimit: number;
-  lookbackMinutes: number;
-  staleThresholdMinutes: number;
+  initialPayload: DashboardPayload;
 };
 
 type FetchState = 'idle' | 'loading' | 'error';
@@ -21,17 +21,29 @@ type ApiResponse = DashboardPayload & {
   config: {
     topLimit: number;
     lookbackMinutes: number;
-    staleThresholdMinutes: number;
   };
 };
 
-export function DashboardLive(props: DashboardLiveProps) {
-  const [entries, setEntries] = useState<SerializableStream[]>(props.initialEntries);
-  const [totals, setTotals] = useState<DashboardTotals>(props.initialTotals);
+type FiltersState = {
+  search: string;
+  statuses: Set<StreamStatus>;
+};
+
+function createInitialFilters(): FiltersState {
+  return {
+    search: '',
+    statuses: new Set<StreamStatus>(['live', 'cooldown']),
+  };
+}
+
+export function DashboardLive({ initialPayload }: DashboardLiveProps) {
+  const [payload, setPayload] = useState<DashboardPayload>(initialPayload);
   const [fetchState, setFetchState] = useState<FetchState>('idle');
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
+  const [filters, setFilters] = useState<FiltersState>(createInitialFilters);
+  const [octobox, setOctobox] = useState<(string | null)[]>(() => Array(OCTOBOX_SLOTS).fill(null));
+  const [expandedOctobox, setExpandedOctobox] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +52,7 @@ export function DashboardLive(props: DashboardLiveProps) {
       try {
         setFetchState('loading');
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), Math.max(REFRESH_INTERVAL_MS - 1000, 5000));
+        const timeout = setTimeout(() => controller.abort(), Math.max(REFRESH_INTERVAL_MS - 2000, 5000));
         const res = await fetch('/api/live', {
           cache: 'no-store',
           signal: controller.signal,
@@ -54,12 +66,11 @@ export function DashboardLive(props: DashboardLiveProps) {
           throw new Error(`HTTP ${res.status}`);
         }
 
-        const payload = (await res.json()) as ApiResponse;
+        const incoming = (await res.json()) as ApiResponse;
         if (cancelled) return;
 
-        setEntries(payload.entries);
-        setTotals(payload.totals);
-        setLastUpdated(new Date());
+        const { config: _config, ...payloadData } = incoming;
+        setPayload(payloadData);
         setFetchState('idle');
         setErrorMessage(null);
         setRefreshCount((count) => count + 1);
@@ -80,66 +91,130 @@ export function DashboardLive(props: DashboardLiveProps) {
   }, []);
 
   const lastUpdatedLabel = useMemo(() => {
-    const diffMs = Date.now() - lastUpdated.getTime();
-    const diffSeconds = Math.floor(diffMs / 1000);
-    if (diffSeconds <= 45) return `${diffSeconds}s ago`;
+    if (!payload.generatedAt) return 'unknown';
+    const generated = new Date(payload.generatedAt).getTime();
+    if (!Number.isFinite(generated)) return 'unknown';
+    const diffMs = Date.now() - generated;
+    const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
     const diffMinutes = Math.floor(diffSeconds / 60);
     if (diffMinutes < 60) return `${diffMinutes}m ago`;
     const diffHours = Math.floor(diffMinutes / 60);
     return `${diffHours}h ago`;
-  }, [lastUpdated]);
+  }, [payload.generatedAt]);
+
+  const streamsByMint = useMemo(() => {
+    const map = new Map<string, DashboardStream>();
+    for (const stream of payload.streams) {
+      map.set(stream.mintId, stream);
+    }
+    return map;
+  }, [payload.streams]);
+
+  const filteredStreams = useMemo(() => {
+    const query = filters.search.trim().toLowerCase();
+    return payload.streams
+      .filter((stream) => filters.statuses.has(stream.status))
+      .filter((stream) => {
+        if (!query) return true;
+        const name = stream.name?.toLowerCase() ?? '';
+        const symbol = stream.symbol?.toLowerCase() ?? '';
+        const mint = stream.mintId.toLowerCase();
+        return name.includes(query) || symbol.includes(query) || mint.includes(query);
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [payload.streams, filters]);
+
+  const spotlightStreams = payload.spotlight;
+
+  const octoboxStreams = octobox.map((mintId) => (mintId ? streamsByMint.get(mintId) ?? null : null));
+
+  function toggleStatus(status: StreamStatus) {
+    setFilters((prev) => {
+      const next = new Set(prev.statuses);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      if (!next.size) {
+        next.add('live');
+      }
+      return { ...prev, statuses: next };
+    });
+  }
+
+  function handleAddToOctobox(mintId: string) {
+    setOctobox((prev) => {
+      const idx = prev.findIndex((slot) => slot === mintId);
+      if (idx !== -1) return prev;
+      const emptyIndex = prev.findIndex((slot) => slot === null);
+      if (emptyIndex !== -1) {
+        const next = [...prev];
+        next[emptyIndex] = mintId;
+        return next;
+      }
+      const next = [...prev];
+      next[next.length - 1] = mintId;
+      return next;
+    });
+  }
+
+  function handleRemoveOctobox(index: number) {
+    setOctobox((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
+  }
 
   return (
-    <>
-      <section className="section-heading" style={{ marginTop: '2rem' }}>
-        <h2>Leaderboard</h2>
-        <span style={{ opacity: 0.6, fontSize: '0.9rem' }}>
-          Auto-refreshing every {Math.round(REFRESH_INTERVAL_MS / 1000)}s · Last update {lastUpdatedLabel}
-          {fetchState === 'loading' ? ' · refreshing…' : ''}
-          {fetchState === 'error' ? ' · refresh failed' : ''}
-        </span>
-      </section>
+    <section className="dashboard-shell">
+      <header className="command-bar">
+        <div className="brand">Pumpstreams</div>
+        <div className="summary">
+          <span><strong>{payload.totals.liveStreams}</strong> live</span>
+          <span>{payload.totals.totalLiveViewers.toLocaleString()} viewers</span>
+          <span>Updated {lastUpdatedLabel}</span>
+        </div>
+        <div className="actions">
+          <input
+            value={filters.search}
+            onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+            placeholder="Search stream or mint"
+            aria-label="Search streams"
+          />
+          <div className="status-toggle">
+            {(['live', 'cooldown', 'ended'] as StreamStatus[]).map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={filters.statuses.has(status) ? 'active' : ''}
+                onClick={() => toggleStatus(status)}
+              >
+                {status === 'live' ? 'Live' : status === 'cooldown' ? 'Cooling' : 'Ended'}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="octobox-launch" onClick={() => setExpandedOctobox((open) => !open)}>
+            {expandedOctobox ? 'Hide Octobox' : 'Launch Octobox'}
+          </button>
+        </div>
+      </header>
+
+      <CriticalEventsBar events={payload.events} />
+
+      <SpotlightReel streams={spotlightStreams} onAddToOctobox={handleAddToOctobox} />
+
+      {expandedOctobox && <OctoboxDock slots={octoboxStreams} onRemove={handleRemoveOctobox} />}
 
       {fetchState === 'error' && errorMessage && (
-        <div
-          style={{
-            margin: '1rem 0',
-            padding: '0.75rem 1rem',
-            borderRadius: '12px',
-            border: '1px solid rgba(255, 115, 0, 0.45)',
-            background: 'rgba(255, 115, 0, 0.08)',
-            color: '#ffbf88',
-            fontSize: '0.9rem',
-          }}
-        >
+        <div className="alert error" role="status">
           Refresh failed: {errorMessage}
         </div>
       )}
 
-      <StreamLeaderboard entries={entries} limit={props.topLimit} />
-
-      <div className="summary-strip" style={{ marginTop: '1.5rem' }}>
-        <div className="summary-pill">
-          <span>Active streams (top {props.topLimit})</span>
-          <strong>{totals.activeCount}</strong>
-        </div>
-        <div className="summary-pill">
-          <span>Inactive in buffer</span>
-          <strong>{totals.inactiveCount}</strong>
-        </div>
-        <div className="summary-pill">
-          <span>Total viewers (active)</span>
-          <strong>{totals.totalViewers.toLocaleString()}</strong>
-        </div>
-        <div className="summary-pill">
-          <span>Aggregate market cap (SOL)</span>
-          <strong>{totals.totalMarketCap.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong>
-        </div>
-      </div>
-
-      <div style={{ opacity: 0.35, fontSize: '0.75rem', marginTop: '0.5rem' }}>
-        Live refreshes: {refreshCount}
-      </div>
-    </>
+      <LiveLeaderboard streams={filteredStreams} onAddToOctobox={handleAddToOctobox} />
+    </section>
   );
 }

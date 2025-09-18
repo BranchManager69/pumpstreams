@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import './lib/env.js';
+import '../lib/env.js';
 import { parseArgs } from 'util';
-import { getLivekitConnectionDetails, decodeJwt } from './lib/livestream-api.js';
-import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from './lib/io-utils.js';
-import { persistLivestreamSession } from './lib/supabase-storage.js';
+import { getLivekitConnectionDetails, decodeJwt } from '../lib/livestream-api.js';
+import { buildJsonFileName, resolveOutputTarget, toJson, writeJsonFile } from '../lib/io-utils.js';
+import { persistLivestreamSession } from '../lib/supabase-storage.js';
 
 const { positionals, values } = parseArgs({
   options: {
@@ -19,7 +19,7 @@ const { positionals, values } = parseArgs({
 const mintId = positionals[0] || values.mint;
 
 if (!mintId) {
-  console.error('Usage: node livekit-subscriber.mjs <mint> [--duration 30] [--output path/] [--json]');
+  console.error('Usage: npm run subscribe -- <mint> [--duration 30] [--output path/] [--json]');
   process.exit(1);
 }
 

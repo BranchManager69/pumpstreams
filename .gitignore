@@ -23,3 +23,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Honkit build output
+docs/_book/

@@ -4,8 +4,9 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env.remote') });
 module.exports = {
   apps: [
     {
-      name: 'pumpstreams-live-poller',
-      script: 'live-poller.mjs',
+      name: 'pumpstreams-api',
+      script: 'cli/index.mjs',
+      args: 'poller',
       instances: 1,
       env: {
         LIVE_POLLER_INTERVAL_MS: '30000',
@@ -14,7 +15,7 @@ module.exports = {
       },
     },
     {
-      name: 'pumpstreams-dashboard',
+      name: 'pumpstreams-fe',
       cwd: 'dashboard',
       script: 'npm',
       args: 'run start',

@@ -1,9 +1,9 @@
-import './lib/env.js';
+import '../lib/env.js';
 import io from 'socket.io-client';
 import fs from 'fs/promises';
 import path from 'path';
-import { formatSol, lamportsFrom, lamportsToNumber } from './lib/token-math.js';
-import { persistTradeEvent, flushSupabaseQueues } from './lib/supabase-storage.js';
+import { formatSol, lamportsFrom, lamportsToNumber } from '../lib/token-math.js';
+import { persistTradeEvent, flushSupabaseQueues } from '../lib/supabase-storage.js';
 
 const PUMP_FUN_WS = 'https://frontend-api-v3.pump.fun';
 const ORIGIN = 'https://pump.fun';

@@ -2,21 +2,25 @@
   "name": "pumpstreams",
   "version": "1.0.0",
   "description": "Pump.fun WebSocket monitoring tools",
-  "main": "monitor.mjs",
+  "main": "cli/index.mjs",
   "type": "module",
   "scripts": {
-    "start": "node monitor.mjs",
+    "start": "node cli/index.mjs monitor",
     "test": "node --test",
-    "advanced": "node advanced.mjs",
+    "advanced": "node cli/index.mjs advanced",
     "offline": "node --test tests/helpers-offline.test.mjs",
-    "monitor": "node monitor.mjs",
-    "live": "node livestream-cli.mjs",
-    "investigate": "node live-investigator.mjs",
-    "subscribe": "node livekit-subscriber.mjs",
-    "poller": "node live-poller.mjs",
-    "analyze": "node analytics.mjs",
+    "monitor": "node cli/index.mjs monitor",
+    "live": "node cli/index.mjs live",
+    "investigate": "node cli/index.mjs investigate",
+    "subscribe": "node cli/index.mjs subscribe",
+    "poller": "node cli/index.mjs poller",
+    "analyze": "node cli/index.mjs analyze",
     "smoke": "PUMPSTREAMS_TEST_LIMIT=1 node --test tests/livestream-endpoints.test.mjs",
-    "ws-test": "node test.mjs"
+    "ws-test": "node cli/index.mjs ws-test",
+    "cli": "node cli/index.mjs",
+    "docs:serve": "honkit serve docs --port 3052",
+    "docs:build": "honkit build docs docs/_book",
+    "docs:deploy": "bash tools/docs-deploy.sh"
   },
   "keywords": [
     "pump.fun",
@@ -33,5 +37,8 @@
     "puppeteer": "^24.21.0",
     "socket.io-client": "^4.8.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "honkit": "^6.1.4"
   }
 }

@@ -10,6 +10,7 @@ test.describe('Dashboard screenshots', () => {
   for (const route of routes) {
     test(`capture ${route.slug}`, async ({ page }, testInfo) => {
       await page.goto(route.path, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(500);
 
       const dir = path.join(
         'tests',
