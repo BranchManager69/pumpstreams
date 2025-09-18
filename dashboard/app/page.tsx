@@ -4,6 +4,11 @@ export const revalidate = 0;
 import { fetchTopStreams } from '../lib/fetch-top-streams';
 import { DashboardLive } from '../components/dashboard-live';
 import type { DashboardPayload } from '../types/dashboard';
+import type { SolPriceSnapshot } from '../components/sol-price-context';
+import { SolPriceProvider } from '../components/sol-price-context';
+import { SiteHeader } from '../components/site-header';
+import { SiteFooter } from '../components/site-footer';
+import { getSolPriceUSD } from '../lib/sol-price';
 
 function fallbackPayload(): DashboardPayload {
   return {
@@ -25,8 +30,16 @@ function fallbackPayload(): DashboardPayload {
   };
 }
 
+function fallbackSolPrice(): SolPriceSnapshot {
+  return {
+    priceUsd: null,
+    fetchedAt: null,
+  };
+}
+
 export default async function DashboardPage() {
   let payload: DashboardPayload;
+  let solPriceSnapshot: SolPriceSnapshot = fallbackSolPrice();
   try {
     payload = await fetchTopStreams();
   } catch (error) {
@@ -34,14 +47,32 @@ export default async function DashboardPage() {
     payload = fallbackPayload();
   }
 
-  return (
-    <main>
-      <header>
-        <h1>Pumpstreams Live Dashboard</h1>
-        <p>Live attention tracker for Pump.fun streams. Fresh data, no ghosts.</p>
-      </header>
+  try {
+    const priceUsd = await getSolPriceUSD({ cacheMs: 60_000 });
+    if (Number.isFinite(priceUsd)) {
+      solPriceSnapshot = {
+        priceUsd,
+        fetchedAt: new Date().toISOString(),
+      };
+    }
+  } catch (error) {
+    console.error('[dashboard] getSolPriceUSD failed', error);
+  }
 
-      <DashboardLive initialPayload={payload} />
-    </main>
+  return (
+    <SolPriceProvider initialSnapshot={solPriceSnapshot}>
+      <div className="site-shell">
+        <SiteHeader />
+        <main>
+          <header>
+            <h1>Pumpstreams Live Dashboard</h1>
+            <p>Live attention tracker for Pump.fun streams. Fresh data, no ghosts.</p>
+          </header>
+
+          <DashboardLive initialPayload={payload} />
+        </main>
+        <SiteFooter />
+      </div>
+    </SolPriceProvider>
   );
 }

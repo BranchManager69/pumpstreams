@@ -1,15 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { DashboardPayload } from '../types/dashboard';
 import type { DashboardStream, StreamStatus } from '../lib/types';
 import { LiveLeaderboard } from './stream-leaderboard';
 import { SpotlightReel } from './spotlight-reel';
-import { OctoboxDock } from './octobox-dock';
-import { CriticalEventsBar } from './critical-events';
+import { DebugConsole } from './debug-console';
+import { useSolPrice } from './sol-price-context';
 
 const REFRESH_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS ?? '20000');
-const OCTOBOX_SLOTS = 8;
 
 export type DashboardLiveProps = {
   initialPayload: DashboardPayload;
@@ -42,9 +42,8 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
   const [filters, setFilters] = useState<FiltersState>(createInitialFilters);
-  const [octobox, setOctobox] = useState<(string | null)[]>(() => Array(OCTOBOX_SLOTS).fill(null));
-  const [expandedOctobox, setExpandedOctobox] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,9 +172,73 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   const spotlightStreams = payload.spotlight;
 
-  const octoboxStreams = octobox.map((mintId) => (mintId ? streamsByMint.get(mintId) ?? null : null));
-
   const isOffline = Boolean(payload.supabaseOffline) || fetchState === 'error';
+
+  const { priceUsd } = useSolPrice();
+
+  const totalMarketCapUsd = useMemo(() => {
+    if (priceUsd === null) return null;
+    const total = payload.totals.totalLiveMarketCap;
+    if (!Number.isFinite(total)) return null;
+    return total * priceUsd;
+  }, [payload.totals.totalLiveMarketCap, priceUsd]);
+
+  const lastPollCompact = useMemo(() => compactTime(lastPollLabel), [lastPollLabel]);
+  const lastUpdatedCompact = useMemo(() => compactTime(lastUpdatedLabel), [lastUpdatedLabel]);
+  const oldestSampleCompact = oldestSampleLabel ?? '—';
+  const viewersCompact = formatWhole(payload.totals.totalLiveViewers);
+  const marketCapCompact = formatWhole(payload.totals.totalLiveMarketCap);
+
+  const debugSections = useMemo(() => {
+    return [
+      {
+        title: 'Poll cadence',
+        entries: [
+          { label: 'Generated at', value: payload.generatedAt },
+          { label: 'Latest snapshot at', value: payload.latestSnapshotAt ?? 'n/a' },
+          { label: 'Oldest sample age (s)', value: payload.oldestSnapshotAgeSeconds ?? 'n/a' },
+          { label: 'Age offset (s)', value: ageOffsetSeconds },
+          { label: 'Refresh count', value: refreshCount },
+          { label: 'Fetch state', value: fetchState },
+          { label: 'Last poll label', value: lastPollLabel },
+          { label: 'Updated label', value: lastUpdatedLabel },
+        ],
+      },
+      {
+        title: 'Totals',
+        entries: [
+          { label: 'Live', value: payload.totals.liveStreams },
+          { label: 'Signal lost', value: payload.totals.disconnectingStreams },
+          { label: 'Viewers', value: formatWhole(payload.totals.totalLiveViewers) },
+          { label: 'Market cap (SOL)', value: formatWhole(payload.totals.totalLiveMarketCap) },
+          { label: 'Market cap (USD)', value: formatUsdWhole(totalMarketCapUsd) },
+        ],
+      },
+      {
+        title: 'Filters',
+        entries: [
+          { label: 'Search', value: filters.search || '(none)' },
+          { label: 'Statuses', value: Array.from(filters.statuses).join(', ') },
+        ],
+      },
+    ];
+  }, [
+    ageOffsetSeconds,
+    fetchState,
+    filters.search,
+    filters.statuses,
+    lastPollLabel,
+    lastUpdatedLabel,
+    payload.generatedAt,
+    payload.latestSnapshotAt,
+    payload.oldestSnapshotAgeSeconds,
+    payload.totals.disconnectingStreams,
+    payload.totals.liveStreams,
+    payload.totals.totalLiveMarketCap,
+    payload.totals.totalLiveViewers,
+    refreshCount,
+    totalMarketCapUsd,
+  ]);
 
   function toggleStatus(status: StreamStatus) {
     setFilters((prev) => {
@@ -192,32 +255,9 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     });
   }
 
-  function handleAddToOctobox(mintId: string) {
-    setOctobox((prev) => {
-      const idx = prev.findIndex((slot) => slot === mintId);
-      if (idx !== -1) return prev;
-      const emptyIndex = prev.findIndex((slot) => slot === null);
-      if (emptyIndex !== -1) {
-        const next = [...prev];
-        next[emptyIndex] = mintId;
-        return next;
-      }
-      const next = [...prev];
-      next[next.length - 1] = mintId;
-      return next;
-    });
-  }
-
-  function handleRemoveOctobox(index: number) {
-    setOctobox((prev) => {
-      const next = [...prev];
-      next[index] = null;
-      return next;
-    });
-  }
-
   return (
     <section className="dashboard-shell">
+      <DebugConsole open={showDebug} onClose={() => setShowDebug(false)} sections={debugSections} />
       {isOffline && (
         <div className="offline-banner" role="alert">
           <strong>Snapshot service offline.</strong>
@@ -227,16 +267,38 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         </div>
       )}
       <header className="command-bar">
-        <div className="brand">Pumpstreams</div>
+        <Link href="/" className="brand">
+          Pumpstreams
+        </Link>
         <div className="summary">
-          <span><strong>{payload.totals.liveStreams}</strong> live</span>
-          <span>{payload.totals.totalLiveViewers.toLocaleString()} viewers</span>
-          {payload.totals.disconnectingStreams > 0 && (
-            <span>{payload.totals.disconnectingStreams} signal lost</span>
-          )}
-          <span>Last poll {lastPollLabel}</span>
-          {oldestSampleLabel && <span>Oldest sample {oldestSampleLabel}</span>}
-          <span>Updated {lastUpdatedLabel}</span>
+          <span className="summary-chip" title="Live streams">
+            <abbr aria-hidden="true">LIVE</abbr>
+            <strong>{payload.totals.liveStreams}</strong>
+          </span>
+          <span className="summary-chip" title="Signal lost">
+            <abbr aria-hidden="true">SIG</abbr>
+            <strong>{payload.totals.disconnectingStreams}</strong>
+          </span>
+          <span className="summary-chip" title="Viewers">
+            <abbr aria-hidden="true">VIEW</abbr>
+            <strong>{viewersCompact}</strong>
+          </span>
+          <span className="summary-chip" title="Market cap (SOL)">
+            <abbr aria-hidden="true">MCAP</abbr>
+            <strong>{marketCapCompact}</strong>
+          </span>
+          <span className="summary-chip" title="Last poll delta">
+            <abbr aria-hidden="true">LP</abbr>
+            <strong>{lastPollCompact}</strong>
+          </span>
+          <span className="summary-chip" title="Oldest sample age">
+            <abbr aria-hidden="true">OS</abbr>
+            <strong>{oldestSampleCompact}</strong>
+          </span>
+          <span className="summary-chip" title="UI data age">
+            <abbr aria-hidden="true">UI</abbr>
+            <strong>{lastUpdatedCompact}</strong>
+          </span>
         </div>
         <div className="actions">
           <input
@@ -257,17 +319,13 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
               </button>
             ))}
           </div>
-          <button type="button" className="octobox-launch" onClick={() => setExpandedOctobox((open) => !open)}>
-            {expandedOctobox ? 'Hide Octobox' : 'Launch Octobox'}
+          <button type="button" className="debug-toggle" onClick={() => setShowDebug((open) => !open)}>
+            {showDebug ? 'Hide debug' : 'Show debug'}
           </button>
         </div>
       </header>
 
-      <CriticalEventsBar events={payload.events} />
-
-      <SpotlightReel streams={spotlightStreams} onAddToOctobox={handleAddToOctobox} />
-
-      {expandedOctobox && <OctoboxDock slots={octoboxStreams} onRemove={handleRemoveOctobox} />}
+      <SpotlightReel streams={spotlightStreams} />
 
       {fetchState === 'error' && errorMessage && (
         <div className="alert error" role="status">
@@ -275,11 +333,28 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         </div>
       )}
 
-      <LiveLeaderboard
-        streams={filteredStreams}
-        onAddToOctobox={handleAddToOctobox}
-        ageOffsetSeconds={ageOffsetSeconds}
-      />
+      <LiveLeaderboard streams={filteredStreams} ageOffsetSeconds={ageOffsetSeconds} />
     </section>
   );
+}
+
+function compactTime(label: string): string {
+  if (!label || label === 'unknown') return '—';
+  return label.replace(/\s?ago$/, '');
+}
+
+function formatWhole(value: number | null, step = 1): string {
+  if (value === null || !Number.isFinite(value)) return '—';
+  const rounded = Math.round((value as number) / step) * step;
+  return Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(rounded);
+}
+
+function formatUsdWhole(value: number | null, step = 10): string {
+  if (value === null || !Number.isFinite(value)) return '$—';
+  const rounded = Math.round((value as number) / step) * step;
+  return Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(rounded);
 }

@@ -1,15 +1,16 @@
 'use client';
 
 import type { DashboardStream } from '../lib/types';
+import { useSolPrice } from './sol-price-context';
 
 export type StreamCardProps = {
   stream: DashboardStream;
   rank: number;
-  onAddToOctobox: (mintId: string) => void;
   ageOffsetSeconds: number;
 };
 
-export function StreamCard({ stream, rank, onAddToOctobox, ageOffsetSeconds }: StreamCardProps) {
+export function StreamCard({ stream, rank, ageOffsetSeconds }: StreamCardProps) {
+  const { priceUsd } = useSolPrice();
   return (
     <article className={`mobile-card mobile-${stream.status}`}>
       <header>
@@ -26,8 +27,12 @@ export function StreamCard({ stream, rank, onAddToOctobox, ageOffsetSeconds }: S
               role="status"
               aria-label={`Signal lost, removing in ${Math.max(0, (stream.dropCountdownSeconds ?? 0) - ageOffsetSeconds)} seconds`}
             >
-              <DisconnectIcon />
-              <span>{formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}</span>
+              <span className="disconnect-ring">
+                <span className="disconnect-seconds">
+                  {formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}
+                </span>
+              </span>
+              <span className="disconnect-label">Signal lost</span>
             </span>
           )}
         </div>
@@ -35,43 +40,24 @@ export function StreamCard({ stream, rank, onAddToOctobox, ageOffsetSeconds }: S
       <div className="hero-line">
         <strong>{(stream.metrics.viewers.current ?? 0).toLocaleString()}</strong>
         <span>viewers</span>
-        <span className={deltaClass(stream.metrics.viewers.momentum.delta5m)}>
-          {formatDelta(stream.metrics.viewers.momentum.delta5m)} / 5m
-        </span>
       </div>
       <div className="second-line">
-        <span>Δ15m {formatDelta(stream.metrics.viewers.momentum.delta15m)}</span>
-        <span>Market {formatNumber(stream.metrics.marketCap.current)} SOL</span>
+        <span className="market-line">MC {formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
       </div>
       <footer>
-        <button type="button" onClick={() => onAddToOctobox(stream.mintId)}>
-          Add to Octobox
-        </button>
         <span className="mint">{stream.mintId.slice(0, 4)}…{stream.mintId.slice(-4)}</span>
       </footer>
     </article>
   );
 }
 
-function deltaClass(delta: number | null): string {
-  if (delta === null) return 'muted';
-  if (delta > 0) return 'positive';
-  if (delta < 0) return 'negative';
-  return 'muted';
-}
-
-function formatDelta(delta: number | null): string {
-  if (delta === null) return '—';
-  if (delta === 0) return '0';
-  return `${delta > 0 ? '+' : ''}${delta.toLocaleString()}`;
-}
-
-function formatNumber(value: number | null): string {
-  if (value === null) return '—';
-  if (!Number.isFinite(value)) return '—';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toFixed(0);
+function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
+  if (sol === null || !Number.isFinite(sol) || priceUsd === null || !Number.isFinite(priceUsd)) return '$—';
+  const usd = sol * priceUsd;
+  if (usd < 1_000) return '<$1.0K';
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  return `$${(usd / 1_000).toFixed(1)}K`;
 }
 
 function formatAge(age: number | null, offsetSeconds = 0): string {
@@ -89,19 +75,4 @@ function formatCountdown(seconds: number | null, offsetSeconds = 0): string {
   const remaining = Math.max(0, seconds - offsetSeconds);
   if (remaining <= 0) return '0s';
   return `${remaining}s`;
-}
-
-function DisconnectIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M5.75 4.25L3 7l2.75 2.75M10.25 4.25L13 7l-2.75 2.75"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M6.5 12.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
 }

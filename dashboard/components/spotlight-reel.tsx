@@ -5,10 +5,9 @@ import type { DashboardStream } from '../lib/types';
 
 export type SpotlightReelProps = {
   streams: DashboardStream[];
-  onAddToOctobox: (mintId: string) => void;
 };
 
-export function SpotlightReel({ streams, onAddToOctobox }: SpotlightReelProps) {
+export function SpotlightReel({ streams }: SpotlightReelProps) {
   if (!streams.length) {
     return null;
   }
@@ -34,9 +33,6 @@ export function SpotlightReel({ streams, onAddToOctobox }: SpotlightReelProps) {
             </div>
           </div>
           <div className="actions">
-            <button type="button" onClick={() => onAddToOctobox(stream.mintId)}>
-              Add to Octobox
-            </button>
             <a href={`https://pump.fun/${stream.mintId}`} target="_blank" rel="noreferrer">
               Open stream ↗
             </a>

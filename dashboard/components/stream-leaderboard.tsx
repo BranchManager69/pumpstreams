@@ -2,10 +2,10 @@
 
 import type { DashboardStream } from '../lib/types';
 import { StreamCard } from './stream-card';
+import { useSolPrice } from './sol-price-context';
 
 export type LiveLeaderboardProps = {
   streams: DashboardStream[];
-  onAddToOctobox: (mintId: string) => void;
   ageOffsetSeconds: number;
 };
 
@@ -15,7 +15,8 @@ const statusLabels: Record<DashboardStream['status'], string> = {
   disconnecting: 'Signal lost · pending cutoff',
 };
 
-export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: LiveLeaderboardProps) {
+export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardProps) {
+  const { priceUsd } = useSolPrice();
   const grouped = new Map<DashboardStream['status'], DashboardStream[]>();
   for (const status of statusOrder) grouped.set(status, []);
 
@@ -33,11 +34,8 @@ export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: L
               <th>#</th>
               <th>Stream</th>
               <th className="align-right">Viewers</th>
-              <th className="align-right">Δ5m</th>
-              <th className="align-right">Δ15m</th>
-              <th className="align-right">Market (SOL)</th>
+              <th className="align-right">Mkt Cap</th>
               <th>Preview</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -47,25 +45,19 @@ export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: L
               return (
                 <>
                   <tr key={`${status}-divider`} className="section-row">
-                    <td colSpan={8}>{statusLabels[status]}</td>
+                    <td colSpan={5}>{statusLabels[status]}</td>
                   </tr>
                   {bucket.map((stream, index) => (
                     <tr key={stream.mintId} className={stream.status === 'disconnecting' ? 'status-disconnecting' : ''}>
                       <td>{index + 1}</td>
-                      <td>
-                        <div className="cell-stream">
-                          <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
-                          <div className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</div>
-                        </div>
+                      <td className="cell-stream">
+                        <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
+                        <div className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</div>
                       </td>
-                      <td className="align-right">{(stream.metrics.viewers.current ?? 0).toLocaleString()}</td>
-                      <td className={deltaClass(stream.metrics.viewers.momentum.delta5m)}>
-                        {formatDelta(stream.metrics.viewers.momentum.delta5m)}
+                      <td className="align-right viewers-cell">{(stream.metrics.viewers.current ?? 0).toLocaleString()}</td>
+                      <td className="align-right">
+                        <span className="market-chip">{formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
                       </td>
-                      <td className={deltaClass(stream.metrics.viewers.momentum.delta15m)}>
-                        {formatDelta(stream.metrics.viewers.momentum.delta15m)}
-                      </td>
-                      <td className="align-right">{formatNumber(stream.metrics.marketCap.current)}</td>
                       <td>
                         <div
                           className={`preview-thumb${stream.status === 'disconnecting' ? ' preview-thumb--disconnecting' : ''}`}
@@ -81,16 +73,15 @@ export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: L
                                 (stream.dropCountdownSeconds ?? 0) - ageOffsetSeconds
                               )} seconds`}
                             >
-                              <DisconnectIcon />
-                              <span>{formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}</span>
+                              <div className="disconnect-ring">
+                                <span className="disconnect-seconds">
+                                  {formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}
+                                </span>
+                              </div>
+                              <span className="disconnect-label">Signal lost</span>
                             </div>
                           )}
                         </div>
-                      </td>
-                      <td className="actions">
-                        <button type="button" onClick={() => onAddToOctobox(stream.mintId)}>
-                          Add to Octobox
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -103,38 +94,11 @@ export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: L
 
       <div className="leaderboard-mobile">
         {streams.map((stream, index) => (
-          <StreamCard
-            key={stream.mintId}
-            stream={stream}
-            rank={index + 1}
-            onAddToOctobox={onAddToOctobox}
-            ageOffsetSeconds={ageOffsetSeconds}
-          />
+          <StreamCard key={stream.mintId} stream={stream} rank={index + 1} ageOffsetSeconds={ageOffsetSeconds} />
         ))}
       </div>
     </section>
   );
-}
-
-function deltaClass(delta: number | null): string {
-  if (delta === null) return 'align-right muted';
-  if (delta > 0) return 'align-right positive';
-  if (delta < 0) return 'align-right negative';
-  return 'align-right muted';
-}
-
-function formatDelta(delta: number | null): string {
-  if (delta === null) return '—';
-  if (delta === 0) return '0';
-  return `${delta > 0 ? '+' : ''}${delta.toLocaleString()}`;
-}
-
-function formatNumber(value: number | null): string {
-  if (value === null) return '—';
-  if (!Number.isFinite(value)) return '—';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toFixed(0);
 }
 
 function formatAge(age: number | null, offsetSeconds = 0): string {
@@ -154,22 +118,11 @@ function formatCountdown(seconds: number | null, offsetSeconds = 0): string {
   return `${remaining}s`;
 }
 
-function DisconnectIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M5.75 4.25L3 7l2.75 2.75M10.25 4.25L13 7l-2.75 2.75"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6.5 12.5h3"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
+  if (sol === null || !Number.isFinite(sol) || priceUsd === null || !Number.isFinite(priceUsd)) return '$—';
+  const usd = sol * priceUsd;
+  if (usd < 1_000) return '<$1.0K';
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  return `$${(usd / 1_000).toFixed(1)}K`;
 }
