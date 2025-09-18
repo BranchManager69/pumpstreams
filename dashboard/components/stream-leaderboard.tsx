@@ -6,6 +6,7 @@ import { StreamCard } from './stream-card';
 export type LiveLeaderboardProps = {
   streams: DashboardStream[];
   onAddToOctobox: (mintId: string) => void;
+  ageOffsetSeconds: number;
 };
 
 const statusOrder: DashboardStream['status'][] = ['live', 'disconnecting'];
@@ -14,7 +15,7 @@ const statusLabels: Record<DashboardStream['status'], string> = {
   disconnecting: 'Signal lost · pending cutoff',
 };
 
-export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProps) {
+export function LiveLeaderboard({ streams, onAddToOctobox, ageOffsetSeconds }: LiveLeaderboardProps) {
   const grouped = new Map<DashboardStream['status'], DashboardStream[]>();
   for (const status of statusOrder) grouped.set(status, []);
 
@@ -70,15 +71,18 @@ export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProp
                           className={`preview-thumb${stream.status === 'disconnecting' ? ' preview-thumb--disconnecting' : ''}`}
                           style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }}
                         >
-                          <span>{formatAge(stream.metrics.lastSnapshotAgeSeconds)}</span>
+                          <span>{formatAge(stream.metrics.lastSnapshotAgeSeconds, ageOffsetSeconds)}</span>
                           {stream.status === 'disconnecting' && (
                             <div
                               className="preview-thumb__overlay"
                               role="status"
-                              aria-label={`Signal lost, removing in ${Math.max(0, stream.dropCountdownSeconds ?? 0)} seconds`}
+                              aria-label={`Signal lost, removing in ${Math.max(
+                                0,
+                                (stream.dropCountdownSeconds ?? 0) - ageOffsetSeconds
+                              )} seconds`}
                             >
                               <DisconnectIcon />
-                              <span>{formatCountdown(stream.dropCountdownSeconds)}</span>
+                              <span>{formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}</span>
                             </div>
                           )}
                         </div>
@@ -99,7 +103,13 @@ export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProp
 
       <div className="leaderboard-mobile">
         {streams.map((stream, index) => (
-          <StreamCard key={stream.mintId} stream={stream} rank={index + 1} onAddToOctobox={onAddToOctobox} />
+          <StreamCard
+            key={stream.mintId}
+            stream={stream}
+            rank={index + 1}
+            onAddToOctobox={onAddToOctobox}
+            ageOffsetSeconds={ageOffsetSeconds}
+          />
         ))}
       </div>
     </section>
@@ -127,18 +137,21 @@ function formatNumber(value: number | null): string {
   return value.toFixed(0);
 }
 
-function formatAge(age: number | null): string {
+function formatAge(age: number | null, offsetSeconds = 0): string {
   if (age === null) return '—';
-  if (age < 60) return `${age}s ago`;
-  const minutes = Math.floor(age / 60);
+  const total = Math.max(0, age + offsetSeconds);
+  if (total < 60) return `${total}s ago`;
+  const minutes = Math.floor(total / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
 }
 
-function formatCountdown(seconds: number | null): string {
-  if (seconds === null || seconds <= 0) return '0s';
-  return `${seconds}s`;
+function formatCountdown(seconds: number | null, offsetSeconds = 0): string {
+  if (seconds === null) return '0s';
+  const remaining = Math.max(0, seconds - offsetSeconds);
+  if (remaining <= 0) return '0s';
+  return `${remaining}s`;
 }
 
 function DisconnectIcon() {

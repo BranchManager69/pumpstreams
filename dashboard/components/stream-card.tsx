@@ -6,9 +6,10 @@ export type StreamCardProps = {
   stream: DashboardStream;
   rank: number;
   onAddToOctobox: (mintId: string) => void;
+  ageOffsetSeconds: number;
 };
 
-export function StreamCard({ stream, rank, onAddToOctobox }: StreamCardProps) {
+export function StreamCard({ stream, rank, onAddToOctobox, ageOffsetSeconds }: StreamCardProps) {
   return (
     <article className={`mobile-card mobile-${stream.status}`}>
       <header>
@@ -18,15 +19,15 @@ export function StreamCard({ stream, rank, onAddToOctobox }: StreamCardProps) {
           <span className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</span>
         </div>
         <div className="status-cluster">
-          <small>{formatAge(stream.metrics.lastSnapshotAgeSeconds)}</small>
+          <small>{formatAge(stream.metrics.lastSnapshotAgeSeconds, ageOffsetSeconds)}</small>
           {stream.status === 'disconnecting' && (
             <span
               className="status-chip status-chip--disconnecting"
               role="status"
-              aria-label={`Signal lost, removing in ${Math.max(0, stream.dropCountdownSeconds ?? 0)} seconds`}
+              aria-label={`Signal lost, removing in ${Math.max(0, (stream.dropCountdownSeconds ?? 0) - ageOffsetSeconds)} seconds`}
             >
               <DisconnectIcon />
-              <span>{formatCountdown(stream.dropCountdownSeconds)}</span>
+              <span>{formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}</span>
             </span>
           )}
         </div>
@@ -73,18 +74,21 @@ function formatNumber(value: number | null): string {
   return value.toFixed(0);
 }
 
-function formatAge(age: number | null): string {
+function formatAge(age: number | null, offsetSeconds = 0): string {
   if (age === null) return '—';
-  if (age < 60) return `${age}s ago`;
-  const minutes = Math.floor(age / 60);
+  const total = Math.max(0, age + offsetSeconds);
+  if (total < 60) return `${total}s ago`;
+  const minutes = Math.floor(total / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
 }
 
-function formatCountdown(seconds: number | null): string {
-  if (seconds === null || seconds <= 0) return '0s';
-  return `${seconds}s`;
+function formatCountdown(seconds: number | null, offsetSeconds = 0): string {
+  if (seconds === null) return '0s';
+  const remaining = Math.max(0, seconds - offsetSeconds);
+  if (remaining <= 0) return '0s';
+  return `${remaining}s`;
 }
 
 function DisconnectIcon() {

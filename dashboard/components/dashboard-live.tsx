@@ -44,6 +44,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
   const [filters, setFilters] = useState<FiltersState>(createInitialFilters);
   const [octobox, setOctobox] = useState<(string | null)[]>(() => Array(OCTOBOX_SLOTS).fill(null));
   const [expandedOctobox, setExpandedOctobox] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -91,40 +92,62 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [payload.generatedAt]);
+
   const lastUpdatedLabel = useMemo(() => {
     if (!payload.generatedAt) return 'unknown';
     const generated = new Date(payload.generatedAt).getTime();
     if (!Number.isFinite(generated)) return 'unknown';
-    const diffMs = Date.now() - generated;
+    const diffMs = nowMs - generated;
     const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
     if (diffSeconds < 60) return `${diffSeconds}s ago`;
     const diffMinutes = Math.floor(diffSeconds / 60);
     if (diffMinutes < 60) return `${diffMinutes}m ago`;
     const diffHours = Math.floor(diffMinutes / 60);
     return `${diffHours}h ago`;
+  }, [payload.generatedAt, nowMs]);
+
+  const generatedMs = useMemo(() => {
+    const value = new Date(payload.generatedAt).getTime();
+    return Number.isFinite(value) ? value : null;
   }, [payload.generatedAt]);
+
+  const ageOffsetSeconds = useMemo(() => {
+    if (generatedMs === null) return 0;
+    return Math.max(0, Math.floor((nowMs - generatedMs) / 1000));
+  }, [generatedMs, nowMs]);
 
   const lastPollLabel = useMemo(() => {
     if (!payload.latestSnapshotAt) return 'unknown';
     const ts = new Date(payload.latestSnapshotAt).getTime();
     if (!Number.isFinite(ts)) return 'unknown';
-    const diffSeconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    const diffSeconds = Math.max(0, Math.floor((nowMs - ts) / 1000));
     if (diffSeconds < 60) return `${diffSeconds}s ago`;
     const diffMinutes = Math.floor(diffSeconds / 60);
     if (diffMinutes < 60) return `${diffMinutes}m ago`;
     const diffHours = Math.floor(diffMinutes / 60);
     return `${diffHours}h ago`;
-  }, [payload.latestSnapshotAt]);
+  }, [payload.latestSnapshotAt, nowMs]);
 
   const oldestSampleLabel = useMemo(() => {
     const age = payload.oldestSnapshotAgeSeconds;
     if (age === null || age === undefined) return null;
-    if (age < 60) return `${age}s`; 
-    const minutes = Math.floor(age / 60);
+    const total = Math.max(0, age + ageOffsetSeconds);
+    if (total < 60) return `${total}s`;
+    const minutes = Math.floor(total / 60);
     if (minutes < 60) return `${minutes}m`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h`;
-  }, [payload.oldestSnapshotAgeSeconds]);
+  }, [payload.oldestSnapshotAgeSeconds, ageOffsetSeconds]);
 
   const streamsByMint = useMemo(() => {
     const map = new Map<string, DashboardStream>();
@@ -252,7 +275,11 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         </div>
       )}
 
-      <LiveLeaderboard streams={filteredStreams} onAddToOctobox={handleAddToOctobox} />
+      <LiveLeaderboard
+        streams={filteredStreams}
+        onAddToOctobox={handleAddToOctobox}
+        ageOffsetSeconds={ageOffsetSeconds}
+      />
     </section>
   );
 }
