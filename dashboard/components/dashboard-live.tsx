@@ -70,7 +70,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         if (cancelled) return;
 
         const { config: _config, ...payloadData } = incoming;
-        setPayload(payloadData);
+        setPayload({ ...payloadData, supabaseOffline: false });
         setFetchState('idle');
         setErrorMessage(null);
         setRefreshCount((count) => count + 1);
@@ -78,6 +78,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         if (cancelled) return;
         setFetchState('error');
         setErrorMessage(error instanceof Error ? error.message : 'Unknown error');
+        setPayload((prev) => ({ ...prev, supabaseOffline: true }));
       }
     }
 
@@ -129,6 +130,8 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   const octoboxStreams = octobox.map((mintId) => (mintId ? streamsByMint.get(mintId) ?? null : null));
 
+  const isOffline = Boolean(payload.supabaseOffline) || fetchState === 'error';
+
   function toggleStatus(status: StreamStatus) {
     setFilters((prev) => {
       const next = new Set(prev.statuses);
@@ -170,6 +173,14 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   return (
     <section className="dashboard-shell">
+      {isOffline && (
+        <div className="offline-banner" role="alert">
+          <strong>Snapshot service offline.</strong>
+          <span>
+            Showing the most recent cached data{errorMessage ? ` · ${errorMessage}` : ''}.
+          </span>
+        </div>
+      )}
       <header className="command-bar">
         <div className="brand">Pumpstreams</div>
         <div className="summary">

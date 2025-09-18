@@ -18,6 +18,24 @@ body {
     #02030a;
 }
 
+.offline-banner {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 16px;
+  background: rgba(255, 84, 118, 0.12);
+  border: 1px solid rgba(255, 112, 148, 0.35);
+  color: #ffb5c6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  box-shadow: 0 12px 28px rgba(40, 8, 18, 0.35);
+}
+
+.offline-banner strong {
+  color: #ffd2de;
+}
+
 main {
   margin: 0 auto;
   padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem) 4rem;

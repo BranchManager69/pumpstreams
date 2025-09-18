@@ -3,9 +3,35 @@ export const revalidate = 0;
 
 import { fetchTopStreams } from '../lib/fetch-top-streams';
 import { DashboardLive } from '../components/dashboard-live';
+import type { DashboardPayload } from '../types/dashboard';
+
+function fallbackPayload(): DashboardPayload {
+  return {
+    generatedAt: new Date().toISOString(),
+    windowMinutes: 48,
+    streams: [],
+    spotlight: [],
+    totals: {
+      totalStreams: 0,
+      liveStreams: 0,
+      coolingStreams: 0,
+      endedStreams: 0,
+      totalLiveViewers: 0,
+      totalLiveMarketCap: 0,
+    },
+    events: [],
+    supabaseOffline: true,
+  };
+}
 
 export default async function DashboardPage() {
-  const payload = await fetchTopStreams();
+  let payload: DashboardPayload;
+  try {
+    payload = await fetchTopStreams();
+  } catch (error) {
+    console.error('[dashboard] fetchTopStreams failed', error);
+    payload = fallbackPayload();
+  }
 
   return (
     <main>

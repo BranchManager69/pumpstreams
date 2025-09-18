@@ -24,4 +24,5 @@ export type DashboardPayload = {
   spotlight: DashboardStream[];
   totals: DashboardTotals;
   events: DashboardEvent[];
+  supabaseOffline?: boolean;
 };
