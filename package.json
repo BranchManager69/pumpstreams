@@ -15,6 +15,7 @@
     "subscribe": "node cli/index.mjs subscribe",
     "poller": "node cli/index.mjs poller",
     "analyze": "node cli/index.mjs analyze",
+    "cleanup:snapshots": "node cli/scripts/prune-snapshots.mjs",
     "smoke": "PUMPSTREAMS_TEST_LIMIT=1 node --test tests/livestream-endpoints.test.mjs",
     "ws-test": "node cli/index.mjs ws-test",
     "cli": "node cli/index.mjs",
