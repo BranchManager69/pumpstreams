@@ -1,0 +1,282 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bg: #040507;
+  --panel: #0a1018;
+  --surface: #0e1622;
+  --surface-alt: #111c2a;
+  --border-soft: rgba(79, 255, 209, 0.16);
+  --border-strong: rgba(79, 255, 209, 0.38);
+  --text: #f0f7ff;
+  --text-muted: rgba(228, 240, 255, 0.78);
+  --accent: #4fffd1;
+  --accent-strong: #2eeec0;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: inherit;
+}
+
+.book,
+.book-body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.book-summary {
+  background: var(--panel);
+  border-right: 1px solid var(--border-soft);
+}
+
+.book-summary ul.summary {
+  padding: 1.25rem 1.1rem 2rem;
+  margin: 0;
+}
+
+.book-summary .chapter {
+  margin-bottom: 0.35rem;
+}
+
+.book-summary .chapter > a,
+.book-summary .chapter > span {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.book-summary .chapter > a:hover {
+  color: var(--accent);
+  background: rgba(26, 40, 58, 0.8);
+}
+
+.book-summary .chapter.active > a {
+  color: var(--accent);
+  background: rgba(20, 34, 48, 0.95);
+}
+
+.book-summary .articles {
+  margin: 0.25rem 0 0 0.35rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid rgba(79, 255, 209, 0.12);
+}
+
+.book-summary .articles a {
+  display: block;
+  padding: 0.45rem 0 0.45rem 0.5rem;
+  margin: 0.05rem 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  border-radius: 6px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.book-summary .articles a:hover {
+  color: var(--accent);
+  background: rgba(19, 31, 46, 0.9);
+}
+
+.book-summary .divider {
+  background: rgba(79, 255, 209, 0.14);
+}
+
+#book-search-input {
+  padding: 1rem 1rem 0.6rem;
+}
+
+#book-search-input input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: #121b29;
+  color: var(--text);
+  font: inherit;
+}
+
+#book-search-input input::placeholder {
+  color: rgba(228, 240, 255, 0.5);
+}
+
+.book-header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: none;
+}
+
+.book-header h1 {
+  letter-spacing: 0.04em;
+}
+
+.book-header h1 a {
+  color: var(--text);
+}
+
+.page-wrapper {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px 0 0 10px;
+  box-shadow: 0 12px 28px rgba(3, 7, 14, 0.45);
+}
+
+.page-inner {
+  padding: clamp(2.1rem, 4vw, 3rem) clamp(1.8rem, 5vw, 3.3rem) clamp(2.4rem, 4vw, 3.2rem);
+  color: var(--text);
+  font-size: 1.03rem;
+  line-height: 1.7;
+}
+
+.markdown-section h1,
+.markdown-section h2,
+.markdown-section h3,
+.markdown-section h4 {
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.markdown-section p,
+.markdown-section li {
+  color: var(--text-muted);
+}
+
+.markdown-section strong {
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+blockquote {
+  border-left: 3px solid var(--accent);
+  background: rgba(15, 25, 38, 0.82);
+  padding: 1rem 1.5rem;
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+
+code {
+  background: #141f2d;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 255, 209, 0.18);
+  padding: 0.15rem 0.35rem;
+  color: var(--accent);
+}
+
+pre code {
+  display: block;
+  padding: 1rem;
+  background: #111c2a;
+  border: 1px solid rgba(79, 255, 209, 0.18);
+  border-radius: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(12, 20, 34, 0.92);
+  border: 1px solid rgba(79, 255, 209, 0.18);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+table th,
+table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid rgba(79, 255, 209, 0.12);
+}
+
+table th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--text);
+  background: rgba(17, 28, 42, 0.92);
+}
+
+.book .navigation.navigation-prev a,
+.book .navigation.navigation-next a {
+  background: var(--surface-alt);
+  border: 1px solid var(--border-soft);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.8rem 1.3rem;
+  box-shadow: none;
+}
+
+.book .navigation a:hover {
+  border-color: var(--border-strong);
+  color: var(--accent);
+}
+
+.book .gitbook-link,
+.book .gitbook-link:hover {
+  color: rgba(228, 240, 255, 0.6);
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.3rem;
+  margin: 2.2rem 0 2.8rem;
+}
+
+.landing-card {
+  display: block;
+  padding: 1.25rem 1.45rem 1.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: rgba(17, 28, 42, 0.95);
+  text-decoration: none;
+  color: var(--text);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.landing-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+}
+
+.landing-card h3 {
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.83rem;
+  color: var(--accent);
+}
+
+.landing-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .book-summary {
+    background: rgba(10, 16, 26, 0.96);
+  }
+
+  .page-inner {
+    padding: 2rem 1.3rem 2.4rem;
+  }
+}

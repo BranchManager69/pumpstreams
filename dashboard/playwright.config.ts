@@ -38,6 +38,55 @@ export default defineConfig({
       },
     },
     {
+      name: 'desktop-wide',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1600, height: 900 },
+      },
+    },
+    {
+      name: 'desktop-uhd',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1920, height: 1080 },
+      },
+    },
+    {
+      name: 'laptop-13',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1366, height: 768 },
+      },
+    },
+    {
+      name: 'laptop-15',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1680, height: 1050 },
+      },
+    },
+    {
+      name: 'ipad-landscape',
+      use: {
+        ...devices['iPad Pro 11'],
+        browserName: 'chromium',
+      },
+    },
+    {
+      name: 'ipad-portrait',
+      use: {
+        ...devices['iPad Pro 11'],
+        browserName: 'chromium',
+        viewport: { width: 834, height: 1194 },
+      },
+    },
+    {
+      name: 'iphone-13-pro',
+      use: {
+        ...devices['iPhone 13 Pro'],
+      },
+    },
+    {
       name: 'mobile-chromium',
       use: {
         ...devices['Pixel 5'],

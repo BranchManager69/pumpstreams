@@ -10,7 +10,7 @@ test.describe('Dashboard screenshots', () => {
   for (const route of routes) {
     test(`capture ${route.slug}`, async ({ page }, testInfo) => {
       await page.goto(route.path, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(750);
 
       const dir = path.join(
         'tests',
@@ -21,7 +21,7 @@ test.describe('Dashboard screenshots', () => {
       await fs.mkdir(dir, { recursive: true });
 
       const filePath = path.join(dir, `${route.slug}.png`);
-      await page.screenshot({ path: filePath, fullPage: true });
+      await page.screenshot({ path: filePath, fullPage: true, animations: 'disabled' });
 
       await testInfo.attach(`${route.slug}-${testInfo.project.name}`, {
         path: filePath,

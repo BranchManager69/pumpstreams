@@ -1,4 +1,4 @@
-# FAQ
+# User FAQ
 
 **Can we host multiple doc sites?**
 Yes. You can duplicate this Honkit setup into additional directories (for example `docs-dev/`) and point different subdomains at each build output.

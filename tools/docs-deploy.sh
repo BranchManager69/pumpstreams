@@ -7,7 +7,12 @@ PUBLISH_DIR="/var/www/docs.dexter.cash"
 
 npm --prefix "$ROOT_DIR" run docs:build
 
-sudo mkdir -p "$PUBLISH_DIR"
-sudo rsync -a --delete "$BUILD_DIR/" "$PUBLISH_DIR/"
+SUDO_CMD=""
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO_CMD="sudo"
+fi
+
+$SUDO_CMD mkdir -p "$PUBLISH_DIR"
+$SUDO_CMD rsync -a --delete "$BUILD_DIR/" "$PUBLISH_DIR/"
 
 echo "Docs published to $PUBLISH_DIR"

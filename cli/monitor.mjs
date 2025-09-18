@@ -2,21 +2,78 @@ import '../lib/env.js';
 import io from 'socket.io-client';
 import fs from 'fs/promises';
 import path from 'path';
+import { parseArgs } from 'util';
 import { formatSol, lamportsFrom, lamportsToNumber } from '../lib/token-math.js';
 import { persistTradeEvent, flushSupabaseQueues } from '../lib/supabase-storage.js';
+import { getSolPriceUSD, getCachedSolPriceUSD } from '../lib/sol-price.js';
 
 const PUMP_FUN_WS = 'https://frontend-api-v3.pump.fun';
 const ORIGIN = 'https://pump.fun';
 
+const { values } = parseArgs({
+  options: {
+    'min-sol': { type: 'string' },
+    'min-usd': { type: 'string' },
+    'stats': { type: 'boolean' },
+    'no-stats': { type: 'boolean', default: false },
+    'stats-interval': { type: 'string' },
+    'buys-only': { type: 'boolean', default: false },
+    'sells-only': { type: 'boolean', default: false },
+    'no-log': { type: 'boolean', default: false },
+    'price-refresh-ms': { type: 'string' },
+  },
+  allowPositionals: false,
+});
+
+function parseNumberOption(value, label) {
+  if (value === undefined) {
+    return undefined;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    console.error(`Invalid value for --${label}:` , value);
+    process.exit(1);
+  }
+  return num;
+}
+
+const minSolAmount = parseNumberOption(values['min-sol'], 'min-sol') ?? 0.1;
+const minUsdAmount = parseNumberOption(values['min-usd'], 'min-usd') ?? null;
+const statsIntervalInput = parseNumberOption(values['stats-interval'], 'stats-interval');
+const statsIntervalMs = statsIntervalInput !== undefined
+  ? (statsIntervalInput >= 1000 ? statsIntervalInput : statsIntervalInput * 1000)
+  : 30000;
+const statsEnabled = values['no-stats'] ? false : (values.stats ?? true);
+const buysOnly = Boolean(values['buys-only']);
+const sellsOnly = Boolean(values['sells-only']);
+const priceRefreshMs = parseNumberOption(values['price-refresh-ms'], 'price-refresh-ms') ?? 15000;
+
+let showBuys = true;
+let showSells = true;
+if (buysOnly && !sellsOnly) {
+  showSells = false;
+} else if (sellsOnly && !buysOnly) {
+  showBuys = false;
+} else if (buysOnly && sellsOnly) {
+  // If both flags are set, default to showing everything to avoid hiding trades unexpectedly.
+  showBuys = true;
+  showSells = true;
+}
+
+const logToFile = values['no-log'] ? false : true;
+
 // Configuration
 const config = {
-  logToFile: true,
+  logToFile,
   logDir: './logs',
-  showBuys: true,
-  showSells: true,
-  minSolAmount: 0.1, // Filter trades below this SOL amount
-  trackSpecificMints: [], // Add mint addresses to track specific tokens
-  statsInterval: 30000, // Stats report every 30 seconds
+  showBuys,
+  showSells,
+  minSolAmount,
+  minUsdAmount,
+  trackSpecificMints: [],
+  statsEnabled,
+  statsInterval: statsIntervalMs,
+  priceRefreshMs,
 };
 
 // Statistics tracking
@@ -25,12 +82,33 @@ const stats = {
   buys: 0,
   sells: 0,
   totalSolVolume: 0n,
+  totalUsdVolume: 0,
   uniqueUsers: new Set(),
   uniqueMints: new Set(),
   largestTrade: null,
   largestTradeLamports: 0n,
   tokenStats: new Map(), // Track per-token statistics
 };
+
+let latestSolPrice = getCachedSolPriceUSD() ?? null;
+let lastPriceError = null;
+
+function formatUsd(amount) {
+  if (amount === null || amount === undefined) {
+    return null;
+  }
+  return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function refreshSolPrice() {
+  try {
+    latestSolPrice = await getSolPriceUSD({ cacheMs: config.priceRefreshMs });
+    lastPriceError = null;
+  } catch (error) {
+    lastPriceError = error;
+    console.error('[price] Failed to refresh SOL price:', error.message);
+  }
+}
 
 // Initialize logging
 async function initLogging() {
@@ -63,6 +141,12 @@ function processTrade(trade) {
   const solLamports = lamportsFrom(trade.sol_amount);
   stats.totalSolVolume += solLamports;
 
+  const solNumeric = lamportsToNumber(solLamports);
+  const usdAmount = latestSolPrice !== null ? solNumeric * latestSolPrice : null;
+  if (usdAmount !== null && Number.isFinite(usdAmount)) {
+    stats.totalUsdVolume += usdAmount;
+  }
+
   if (trade.is_buy) {
     stats.buys++;
   } else {
@@ -78,6 +162,7 @@ function processTrade(trade) {
       buys: 0,
       sells: 0,
       volume: 0n,
+      usdVolume: 0,
       firstSeen: new Date(),
       lastTrade: null,
     });
@@ -86,6 +171,9 @@ function processTrade(trade) {
   const tokenStat = stats.tokenStats.get(trade.mint);
   tokenStat.trades++;
   tokenStat.volume += solLamports;
+  if (usdAmount !== null && Number.isFinite(usdAmount)) {
+    tokenStat.usdVolume = (tokenStat.usdVolume ?? 0) + usdAmount;
+  }
   tokenStat.lastTrade = new Date();
   if (trade.is_buy) {
     tokenStat.buys++;
@@ -101,16 +189,25 @@ function processTrade(trade) {
 
   // Format and display trade
   const solFormatted = formatSol(solLamports);
-  const solNumeric = lamportsToNumber(solLamports);
-  const shouldShow = solNumeric >= config.minSolAmount &&
-                     ((trade.is_buy && config.showBuys) || (!trade.is_buy && config.showSells));
+
+  const meetsSol = solNumeric >= config.minSolAmount;
+  const meetsUsd = config.minUsdAmount === null
+    ? true
+    : (usdAmount !== null && Number.isFinite(usdAmount) && usdAmount >= config.minUsdAmount);
+  const directionAllowed = (trade.is_buy && config.showBuys) || (!trade.is_buy && config.showSells);
+  const passesFilters = meetsSol && meetsUsd;
+  const trackedMint = config.trackSpecificMints.includes(trade.mint);
+  const shouldShow = (passesFilters && directionAllowed) || trackedMint;
 
   if (shouldShow || config.trackSpecificMints.includes(trade.mint)) {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
     const action = trade.is_buy ? '🟢 BUY ' : '🔴 SELL';
     const tokenAmount = formatTokenAmount(trade.token_amount);
 
-    const logLine = `[${timestamp}] ${action} ${solFormatted} SOL → ${tokenAmount} ${trade.name || 'Unknown'} | User: ${trade.user.slice(0, 8)}... | Mint: ${trade.mint.slice(0, 8)}...`;
+    const usdFragment = usdAmount !== null && Number.isFinite(usdAmount)
+      ? ` (~$${formatUsd(usdAmount)})`
+      : '';
+    const logLine = `[${timestamp}] ${action} ${solFormatted} SOL${usdFragment} → ${tokenAmount} ${trade.name || 'Unknown'} | User: ${trade.user.slice(0, 8)}... | Mint: ${trade.mint.slice(0, 8)}...`;
 
     console.log(logLine);
 
@@ -122,6 +219,7 @@ function processTrade(trade) {
         timestamp: new Date().toISOString(),
         solLamports: solLamports.toString(),
         sol: solNumeric,
+        usd: usdAmount !== null && Number.isFinite(usdAmount) ? usdAmount : null,
         solFormatted,
       }) + '\n').catch(console.error);
     }
@@ -142,6 +240,11 @@ function displayStats() {
   const seconds = runtime % 60;
 
   console.log(`⏱️  Runtime: ${hours}h ${minutes}m ${seconds}s`);
+  if (latestSolPrice !== null) {
+    console.log(`💲 SOL Price: $${formatUsd(latestSolPrice)}`);
+  } else if (lastPriceError) {
+    console.log(`💲 SOL Price: unavailable (${lastPriceError.message})`);
+  }
   console.log(`📈 Total Trades: ${stats.totalTrades.toLocaleString()}`);
 
   if (stats.totalTrades === 0) {
@@ -154,6 +257,9 @@ function displayStats() {
   }
 
   console.log(`💰 Total Volume: ${formatSol(stats.totalSolVolume)} SOL`);
+  if (stats.totalUsdVolume > 0) {
+    console.log(`   (~$${formatUsd(stats.totalUsdVolume)})`);
+  }
   console.log(`👥 Unique Users: ${stats.uniqueUsers.size.toLocaleString()}`);
   console.log(`🪙 Unique Tokens: ${stats.uniqueMints.size.toLocaleString()}`);
 
@@ -187,11 +293,33 @@ function displayStats() {
 const startTime = Date.now();
 await initLogging();
 
+await refreshSolPrice();
+if (config.priceRefreshMs > 0) {
+  const priceTimer = setInterval(() => {
+    refreshSolPrice();
+  }, config.priceRefreshMs);
+  if (typeof priceTimer.unref === 'function') {
+    priceTimer.unref();
+  }
+}
+
 console.log('🚀 PUMP.FUN WEBSOCKET MONITOR');
 console.log('================================');
 console.log(`📡 Connecting to: ${PUMP_FUN_WS}`);
 console.log(`🎯 Min SOL Filter: ${config.minSolAmount} SOL`);
-console.log(`📊 Stats Interval: ${config.statsInterval / 1000} seconds`);
+if (config.minUsdAmount !== null) {
+  console.log(`💵 Min USD Filter: $${formatUsd(config.minUsdAmount)}`);
+}
+if (latestSolPrice !== null) {
+  console.log(`💲 Current SOL Price: $${formatUsd(latestSolPrice)}`);
+} else if (lastPriceError) {
+  console.log(`💲 Current SOL Price: unavailable (${lastPriceError.message})`);
+} else {
+  console.log('💲 Current SOL Price: fetching...');
+}
+console.log(
+  `📊 Stats: ${config.statsEnabled ? `every ${Math.round(config.statsInterval / 1000)}s` : 'disabled'}`,
+);
 console.log('================================\n');
 
 const socket = io(PUMP_FUN_WS, {
@@ -251,7 +379,12 @@ socket.onAny((eventName, ...args) => {
 });
 
 // Periodic stats display
-setInterval(displayStats, config.statsInterval);
+if (config.statsEnabled && config.statsInterval > 0) {
+  const statsTimer = setInterval(displayStats, config.statsInterval);
+  if (typeof statsTimer.unref === 'function') {
+    statsTimer.unref();
+  }
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
@@ -276,7 +409,12 @@ process.on('SIGINT', async () => {
         topTokens: Array.from(stats.tokenStats.entries())
           .sort((a, b) => Number(b[1].volume - a[1].volume))
           .slice(0, 20)
-          .map(([mint, data]) => ({ mint, ...data, volume: data.volume.toString() })),
+          .map(([mint, data]) => ({
+            mint,
+            ...data,
+            volume: data.volume.toString(),
+            usdVolume: data.usdVolume ?? 0,
+          })),
       },
     }, null, 2));
     console.log(`\n💾 Summary saved to ${summaryFile}`);

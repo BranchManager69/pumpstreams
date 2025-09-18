@@ -22,7 +22,7 @@ const supabase = getSupabase();
 const limit = Number(values.limit) || 10;
 
 async function fetchCurrentLivestreams() {
-  const sources = ['livestream_latest', 'token_latest_snapshot'];
+  const sources = ['livestream_top_cache', 'livestream_latest', 'token_latest_snapshot'];
   let lastError = null;
 
   for (const source of sources) {
@@ -127,12 +127,25 @@ function buildReport({ livestreams, tradeSummary, hourlyTrend }) {
 
 async function main() {
   if (values.refresh) {
-    await supabase.rpc('rebuild_hourly_metrics')
-      .then(({ error }) => {
-        if (error) {
-          throw new Error(`Failed to rebuild hourly metrics: ${error.message}`);
-        }
-      });
+    const [
+      { error: hourlyError },
+      { error: summaryError },
+      { error: liveError },
+    ] = await Promise.all([
+      supabase.rpc('rebuild_hourly_metrics'),
+      supabase.rpc('refresh_mv_token_trade_summary', { concurrent: true }),
+      supabase.rpc('refresh_livestream_top_cache'),
+    ]);
+
+    if (hourlyError) {
+      throw new Error(`Failed to rebuild hourly metrics: ${hourlyError.message}`);
+    }
+    if (summaryError) {
+      throw new Error(`Failed to refresh trade summary: ${summaryError.message}`);
+    }
+    if (liveError) {
+      throw new Error(`Failed to refresh livestream snapshot cache: ${liveError.message}`);
+    }
   }
 
   const [livestreams, tradeSummary, hourlyTrend] = await Promise.all([

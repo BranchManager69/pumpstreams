@@ -8,6 +8,7 @@ This section collects everything the on-call team needs to keep PumpStreams heal
 - Review logs for anomalies in `logs/` (especially the websocket collectors)
 - Validate Supabase connectivity with `npm run smoke`
 - Run `npm run docs:deploy` if there were documentation changes to publish (automatic after committing to `main` when `tools/install-docs-hook.sh` has been run)
+- Hourly backstop: `sudo systemctl enable --now docs-deploy.timer` keeps docs deploying at the top of every hour
 
 ## Incident Response
 

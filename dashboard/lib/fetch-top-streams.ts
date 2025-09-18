@@ -1,6 +1,6 @@
 import { getServiceClient } from './supabase';
 import type { DashboardPayload, DashboardTotals, DashboardEvent } from '../types/dashboard';
-import type { DashboardStream, SnapshotPoint, StreamMomentumMetrics } from './types';
+import type { DashboardStream, SnapshotPoint, StreamMomentumMetrics, StreamMetadata } from './types';
 
 const TOP_LIMIT = Number(process.env.DASHBOARD_TOP_LIMIT ?? '100');
 const LOOKBACK_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
@@ -105,12 +105,12 @@ function calculatePeakViewers(history: SnapshotPoint[]): number | null {
   return peak;
 }
 
-function inferStatus(ageSeconds: number | null, meta: LatestRow['livestream'] | null): DashboardStream['status'] {
+function inferStatus(ageSeconds: number | null, metadata: Record<string, any> | null): DashboardStream['status'] {
   if (ageSeconds === null) return 'archived';
   if (ageSeconds <= LIVE_THRESHOLD_SECONDS) return 'live';
   if (ageSeconds <= COOLDOWN_THRESHOLD_SECONDS) return 'cooldown';
   if (ageSeconds <= ENDED_THRESHOLD_SECONDS) return 'ended';
-  const isComplete = Boolean(meta?.complete ?? meta?.is_complete ?? false);
+  const isComplete = Boolean(metadata?.complete ?? metadata?.is_complete ?? false);
   return isComplete ? 'ended' : 'archived';
 }
 
@@ -191,6 +191,19 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
     }
   }
 
+  let metadataMap: Map<string, StreamMetadata> = new Map();
+  if (mintOrder.length) {
+    const { data: metadataRows, error: metadataError } = await supabase
+      .from('stream_metadata')
+      .select('*')
+      .in('mint_id', mintOrder);
+    if (metadataError) {
+      console.error('[supabase] Failed to fetch stream metadata:', metadataError.message);
+    } else {
+      metadataMap = new Map((metadataRows ?? []).map((row) => [row.mint_id, row as StreamMetadata]));
+    }
+  }
+
   const historyRows: HistoryRow[] = [];
   for (let i = 0; i < mintOrder.length; i += HISTORY_CHUNK_SIZE) {
     const chunk = mintOrder.slice(i, i + HISTORY_CHUNK_SIZE);
@@ -221,12 +234,13 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
 
   const streams: DashboardStream[] = mintOrder.map((mintId) => {
     const latest = latestByMint.get(mintId);
+    const metadata = metadataMap.get(mintId) ?? null;
     if (!latest) {
       return {
         mintId,
-        name: null,
-        symbol: null,
-        thumbnail: null,
+        name: metadata?.name ?? null,
+        symbol: metadata?.symbol ?? null,
+        thumbnail: metadata?.thumbnail ?? null,
         status: 'ended',
         latestAt: null,
         metrics: {
@@ -243,7 +257,7 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
         },
         sparkline: [],
         score: 0,
-        livestreamMeta: null,
+        metadata,
       };
     }
 
@@ -290,8 +304,8 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
       };
     })();
 
-    const meta = latest.livestream ?? null;
-    const status = inferStatus(ageSeconds, meta);
+    const simplified = latest.livestream ?? null;
+    const status = inferStatus(ageSeconds, metadata);
     let freshnessWeight = 0.05;
     if (status === 'live') {
       freshnessWeight = 1;
@@ -307,9 +321,13 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
 
     return {
       mintId,
-      name: (meta?.name as string | undefined) ?? null,
-      symbol: (meta?.symbol as string | undefined) ?? null,
-      thumbnail: latest.thumbnail ?? (meta?.thumbnail as string | undefined) ?? null,
+      name: (metadata?.name as string | undefined) ?? (simplified?.name as string | undefined) ?? null,
+      symbol: (metadata?.symbol as string | undefined) ?? (simplified?.symbol as string | undefined) ?? null,
+      thumbnail:
+        metadata?.thumbnail ??
+        latest.thumbnail ??
+        (simplified?.thumbnail as string | undefined) ??
+        null,
       status,
       latestAt,
       metrics: {
@@ -326,11 +344,7 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
       },
       sparkline: trimmedHistory,
       score,
-      livestreamMeta: {
-        isCurrentlyLive: (latest.is_live ?? meta?.is_currently_live) ?? null,
-        isComplete: (meta?.complete ?? meta?.is_complete) ?? null,
-        totalSupply: (meta?.total_supply as number | undefined) ?? null,
-      },
+      metadata,
     };
   });
 

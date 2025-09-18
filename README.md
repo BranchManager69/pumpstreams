@@ -41,6 +41,14 @@ cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashb
 
 > Tip: run `tools/install-docs-hook.sh` once on the server so every commit to `main` that touches `docs/` or `README.md` auto-runs `npm run docs:deploy`.
 
+Hourly auto-publish (exactly on the clock):
+
+```bash
+sudo systemctl enable --now docs-deploy.timer
+```
+
+Systemd will trigger the deploy script at `HH:00:00` every hour, ensuring the static site stays fresh even if nobody pushes commits locally.
+
 The repo supports two analytics back-ends out of the box:
 
 - **Hosted Supabase Cloud (default)** – commands look for `.env.remote` first. With the supplied file in
@@ -55,7 +63,7 @@ The repo supports two analytics back-ends out of the box:
 
 ## CLI & Automation Toolkit
 
-All entry points share a single dispatcher. Run `npm run cli -- --help` to see every command and alias.
+All entry points share a single dispatcher. Run `npm run cli` for an interactive menu or `npm run cli -- --help` to see every command and alias.
 
 ### WebSocket Monitors
 
@@ -65,7 +73,17 @@ npm run ws-test
 
 # Full monitor with stats + JSONL logging
 npm run monitor
+
+# With filters (5 SOL or $1k+ trades, stats disabled)
+npm run monitor -- --min-sol 5 --min-usd 1000 --no-stats
 ```
+
+`npm run monitor` understands common toggles:
+- `--min-sol <amount>` – minimum trade size in SOL (defaults to `0.1`).
+- `--min-usd <amount>` – optional USD filter (shared SOL price cache refreshes every 15s by default).
+- `--stats` / `--no-stats` and `--stats-interval <seconds>` – control periodic summaries.
+- `--buys-only` / `--sells-only` – focus on one side of the order flow.
+- `--price-refresh-ms <ms>` – override the global SOL price refresh cadence.
 
 ### Advanced Trade Explorer (`cli/advanced.mjs`)
 
