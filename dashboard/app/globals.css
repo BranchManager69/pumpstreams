@@ -442,9 +442,57 @@ header p {
   display: grid;
   place-content: end;
   font-size: 0.7rem;
-  color: rgba(235, 244, 255, 0.8);
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 6px rgba(4, 8, 16, 0.65);
   padding: 0.25rem 0.4rem;
   background-color: rgba(22, 28, 42, 0.6);
+}
+
+.leaderboard-table tr.status-disconnecting {
+  opacity: 0.65;
+  filter: grayscale(0.85);
+  transition: opacity 0.3s ease;
+}
+
+.leaderboard-table tr.status-disconnecting td {
+  color: rgba(210, 226, 255, 0.7);
+}
+
+.leaderboard-table .preview-thumb--disconnecting {
+  filter: grayscale(1);
+  border-color: rgba(255, 122, 150, 0.55);
+}
+
+.leaderboard-table .preview-thumb--disconnecting::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 122, 150, 0.25);
+  border-top-color: rgba(255, 194, 210, 0.6);
+  animation: disconnect-spin 1.2s linear infinite;
+  pointer-events: none;
+}
+
+.leaderboard-table .preview-thumb__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  pointer-events: none;
+  background: rgba(9, 13, 24, 0.72);
+  border-radius: inherit;
+  color: #ffbdca;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.leaderboard-table .preview-thumb__overlay svg {
+  animation: disconnect-spin 1.2s linear infinite;
 }
 
 .leaderboard-table .actions button {
@@ -471,6 +519,23 @@ header p {
   border-radius: 14px;
   background: rgba(9, 13, 23, 0.92);
   border: 1px solid rgba(79, 255, 209, 0.25);
+}
+
+.mobile-card.mobile-disconnecting {
+  filter: grayscale(0.92);
+  border-color: rgba(255, 122, 150, 0.45);
+  position: relative;
+  overflow: hidden;
+}
+
+.mobile-card.mobile-disconnecting::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 122, 150, 0.25);
+  pointer-events: none;
+  animation: disconnect-pulse 2.2s ease-in-out infinite;
 }
 
 .mobile-card header {
@@ -500,8 +565,14 @@ header p {
   font-size: 0.75rem;
 }
 
-.mobile-card header small {
+.mobile-card header .status-cluster {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mobile-card header .status-cluster small {
   font-size: 0.7rem;
   opacity: 0.6;
 }
@@ -522,6 +593,41 @@ header p {
 
 .mobile-card .hero-line .negative {
   color: #ff9580;
+}
+
+.mobile-card .second-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.status-chip--disconnecting {
+  background: rgba(255, 122, 150, 0.18);
+  border-color: rgba(255, 122, 150, 0.45);
+  color: #ffbdca;
+}
+
+.status-chip--disconnecting span {
+  font-weight: 600;
+}
+
+.status-chip--disconnecting svg {
+  color: #ff9daf;
+  animation: disconnect-spin 1.2s linear infinite;
 }
 
 .mobile-card footer {
@@ -547,6 +653,27 @@ header p {
   color: #ffcdb8;
   padding: 0.75rem 1rem;
   border-radius: 12px;
+}
+
+@keyframes disconnect-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes disconnect-pulse {
+  0% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.2;
+  }
 }
 
 @media (max-width: 960px) {

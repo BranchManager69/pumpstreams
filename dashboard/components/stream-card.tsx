@@ -17,7 +17,19 @@ export function StreamCard({ stream, rank, onAddToOctobox }: StreamCardProps) {
           <h3>{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</h3>
           <span className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</span>
         </div>
-        <small>{formatAge(stream.metrics.lastSnapshotAgeSeconds)}</small>
+        <div className="status-cluster">
+          <small>{formatAge(stream.metrics.lastSnapshotAgeSeconds)}</small>
+          {stream.status === 'disconnecting' && (
+            <span
+              className="status-chip status-chip--disconnecting"
+              role="status"
+              aria-label={`Signal lost, removing in ${Math.max(0, stream.dropCountdownSeconds ?? 0)} seconds`}
+            >
+              <DisconnectIcon />
+              <span>{formatCountdown(stream.dropCountdownSeconds)}</span>
+            </span>
+          )}
+        </div>
       </header>
       <div className="hero-line">
         <strong>{(stream.metrics.viewers.current ?? 0).toLocaleString()}</strong>
@@ -68,4 +80,24 @@ function formatAge(age: number | null): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+function formatCountdown(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return '0s';
+  return `${seconds}s`;
+}
+
+function DisconnectIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M5.75 4.25L3 7l2.75 2.75M10.25 4.25L13 7l-2.75 2.75"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M6.5 12.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
 }

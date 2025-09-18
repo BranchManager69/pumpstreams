@@ -3,8 +3,7 @@ import type { DashboardStream } from '../lib/types';
 export type DashboardTotals = {
   totalStreams: number;
   liveStreams: number;
-  coolingStreams: number;
-  endedStreams: number;
+  disconnectingStreams: number;
   totalLiveViewers: number;
   totalLiveMarketCap: number;
 };
@@ -25,4 +24,6 @@ export type DashboardPayload = {
   totals: DashboardTotals;
   events: DashboardEvent[];
   supabaseOffline?: boolean;
+  latestSnapshotAt: string | null;
+  oldestSnapshotAgeSeconds: number | null;
 };

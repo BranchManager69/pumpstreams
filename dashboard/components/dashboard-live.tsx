@@ -32,7 +32,7 @@ type FiltersState = {
 function createInitialFilters(): FiltersState {
   return {
     search: '',
-    statuses: new Set<StreamStatus>(['live', 'cooldown']),
+    statuses: new Set<StreamStatus>(['live', 'disconnecting']),
   };
 }
 
@@ -103,6 +103,28 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     const diffHours = Math.floor(diffMinutes / 60);
     return `${diffHours}h ago`;
   }, [payload.generatedAt]);
+
+  const lastPollLabel = useMemo(() => {
+    if (!payload.latestSnapshotAt) return 'unknown';
+    const ts = new Date(payload.latestSnapshotAt).getTime();
+    if (!Number.isFinite(ts)) return 'unknown';
+    const diffSeconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (diffSeconds < 60) return `${diffSeconds}s ago`;
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    return `${diffHours}h ago`;
+  }, [payload.latestSnapshotAt]);
+
+  const oldestSampleLabel = useMemo(() => {
+    const age = payload.oldestSnapshotAgeSeconds;
+    if (age === null || age === undefined) return null;
+    if (age < 60) return `${age}s`; 
+    const minutes = Math.floor(age / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h`;
+  }, [payload.oldestSnapshotAgeSeconds]);
 
   const streamsByMint = useMemo(() => {
     const map = new Map<string, DashboardStream>();
@@ -186,6 +208,11 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         <div className="summary">
           <span><strong>{payload.totals.liveStreams}</strong> live</span>
           <span>{payload.totals.totalLiveViewers.toLocaleString()} viewers</span>
+          {payload.totals.disconnectingStreams > 0 && (
+            <span>{payload.totals.disconnectingStreams} signal lost</span>
+          )}
+          <span>Last poll {lastPollLabel}</span>
+          {oldestSampleLabel && <span>Oldest sample {oldestSampleLabel}</span>}
           <span>Updated {lastUpdatedLabel}</span>
         </div>
         <div className="actions">
@@ -196,14 +223,14 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
             aria-label="Search streams"
           />
           <div className="status-toggle">
-            {(['live', 'cooldown', 'ended'] as StreamStatus[]).map((status) => (
+            {(['live', 'disconnecting'] as StreamStatus[]).map((status) => (
               <button
                 key={status}
                 type="button"
                 className={filters.statuses.has(status) ? 'active' : ''}
                 onClick={() => toggleStatus(status)}
               >
-                {status === 'live' ? 'Live' : status === 'cooldown' ? 'Cooling' : 'Ended'}
+                {status === 'live' ? 'Live' : 'Signal lost'}
               </button>
             ))}
           </div>

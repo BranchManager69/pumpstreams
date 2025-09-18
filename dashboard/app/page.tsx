@@ -14,13 +14,14 @@ function fallbackPayload(): DashboardPayload {
     totals: {
       totalStreams: 0,
       liveStreams: 0,
-      coolingStreams: 0,
-      endedStreams: 0,
+      disconnectingStreams: 0,
       totalLiveViewers: 0,
       totalLiveMarketCap: 0,
     },
     events: [],
     supabaseOffline: true,
+    latestSnapshotAt: null,
+    oldestSnapshotAgeSeconds: null,
   };
 }
 

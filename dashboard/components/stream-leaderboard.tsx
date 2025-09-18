@@ -8,18 +8,15 @@ export type LiveLeaderboardProps = {
   onAddToOctobox: (mintId: string) => void;
 };
 
-const statusOrder: DashboardStream['status'][] = ['live', 'cooldown', 'ended'];
+const statusOrder: DashboardStream['status'][] = ['live', 'disconnecting'];
 const statusLabels: Record<DashboardStream['status'], string> = {
   live: 'Live right now',
-  cooldown: 'Cooling off',
-  ended: 'Recently ended',
-  archived: 'Earlier sessions',
+  disconnecting: 'Signal lost · pending cutoff',
 };
 
 export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProps) {
   const grouped = new Map<DashboardStream['status'], DashboardStream[]>();
   for (const status of statusOrder) grouped.set(status, []);
-  grouped.set('archived', []);
 
   for (const stream of streams) {
     if (!grouped.has(stream.status)) grouped.set(stream.status, []);
@@ -52,7 +49,7 @@ export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProp
                     <td colSpan={8}>{statusLabels[status]}</td>
                   </tr>
                   {bucket.map((stream, index) => (
-                    <tr key={stream.mintId}>
+                    <tr key={stream.mintId} className={stream.status === 'disconnecting' ? 'status-disconnecting' : ''}>
                       <td>{index + 1}</td>
                       <td>
                         <div className="cell-stream">
@@ -69,8 +66,21 @@ export function LiveLeaderboard({ streams, onAddToOctobox }: LiveLeaderboardProp
                       </td>
                       <td className="align-right">{formatNumber(stream.metrics.marketCap.current)}</td>
                       <td>
-                        <div className="preview-thumb" style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }}>
+                        <div
+                          className={`preview-thumb${stream.status === 'disconnecting' ? ' preview-thumb--disconnecting' : ''}`}
+                          style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }}
+                        >
                           <span>{formatAge(stream.metrics.lastSnapshotAgeSeconds)}</span>
+                          {stream.status === 'disconnecting' && (
+                            <div
+                              className="preview-thumb__overlay"
+                              role="status"
+                              aria-label={`Signal lost, removing in ${Math.max(0, stream.dropCountdownSeconds ?? 0)} seconds`}
+                            >
+                              <DisconnectIcon />
+                              <span>{formatCountdown(stream.dropCountdownSeconds)}</span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="actions">
@@ -124,4 +134,29 @@ function formatAge(age: number | null): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+function formatCountdown(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return '0s';
+  return `${seconds}s`;
+}
+
+function DisconnectIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M5.75 4.25L3 7l2.75 2.75M10.25 4.25L13 7l-2.75 2.75"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.5 12.5h3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }

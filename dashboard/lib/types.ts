@@ -4,7 +4,7 @@ export type SnapshotPoint = {
   market_cap: number | null;
 };
 
-export type StreamStatus = 'live' | 'cooldown' | 'ended' | 'archived';
+export type StreamStatus = 'live' | 'disconnecting';
 
 export type StreamMetadata = {
   mint_id: string;
@@ -73,6 +73,7 @@ export type DashboardStream = {
   thumbnail: string | null;
   status: StreamStatus;
   latestAt: string | null;
+  dropCountdownSeconds: number | null;
   metrics: StreamMetrics;
   sparkline: SnapshotPoint[];
   score: number;

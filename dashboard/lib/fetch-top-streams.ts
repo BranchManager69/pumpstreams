@@ -12,9 +12,14 @@ const HISTORY_CHUNK_SIZE = Number(process.env.DASHBOARD_HISTORY_CHUNK_SIZE ?? '1
 const HISTORY_MAX_POINTS = Number(process.env.DASHBOARD_HISTORY_MAX_POINTS ?? '180');
 const MINT_LIMIT = Math.min(TOP_LIMIT * 3, FETCH_LIMIT);
 const MOMENTUM_WINDOWS_MINUTES = [5, 15] as const;
-const LIVE_THRESHOLD_SECONDS = Number(process.env.DASHBOARD_LIVE_THRESHOLD_SECONDS ?? '90');
-const COOLDOWN_THRESHOLD_SECONDS = Number(process.env.DASHBOARD_COOLDOWN_THRESHOLD_SECONDS ?? '300');
-const ENDED_THRESHOLD_SECONDS = Number(process.env.DASHBOARD_ENDED_THRESHOLD_SECONDS ?? '3600');
+const DEFAULT_POLLER_INTERVAL_MS = 30000;
+const rawPollerIntervalMs = Number(process.env.LIVE_POLLER_INTERVAL_MS ?? DEFAULT_POLLER_INTERVAL_MS);
+const POLLER_INTERVAL_MS = Number.isFinite(rawPollerIntervalMs) && rawPollerIntervalMs > 0 ? rawPollerIntervalMs : DEFAULT_POLLER_INTERVAL_MS;
+const POLLER_INTERVAL_SECONDS = Math.max(1, Math.round(POLLER_INTERVAL_MS / 1000));
+const rawDisconnectCycles = Number(process.env.DASHBOARD_DISCONNECT_CYCLES ?? '2');
+const DISCONNECT_CYCLES = Number.isFinite(rawDisconnectCycles) && rawDisconnectCycles >= 1 ? Math.floor(rawDisconnectCycles) : 2;
+const LIVE_THRESHOLD_SECONDS = POLLER_INTERVAL_SECONDS;
+const DROP_THRESHOLD_SECONDS = Math.max(POLLER_INTERVAL_SECONDS * DISCONNECT_CYCLES, POLLER_INTERVAL_SECONDS + 1);
 const SPOTLIGHT_LIMIT = Number(process.env.DASHBOARD_SPOTLIGHT_LIMIT ?? '8');
 const DROP_VIEWER_DELTA = Number(process.env.DASHBOARD_DROP_VIEWER_DELTA ?? '100');
 const SURGE_VIEWER_DELTA = Number(process.env.DASHBOARD_SURGE_VIEWER_DELTA ?? '120');
@@ -105,20 +110,23 @@ function calculatePeakViewers(history: SnapshotPoint[]): number | null {
   return peak;
 }
 
-function inferStatus(ageSeconds: number | null, metadata: Record<string, any> | null): DashboardStream['status'] {
-  if (ageSeconds === null) return 'archived';
-  if (ageSeconds <= LIVE_THRESHOLD_SECONDS) return 'live';
-  if (ageSeconds <= COOLDOWN_THRESHOLD_SECONDS) return 'cooldown';
-  if (ageSeconds <= ENDED_THRESHOLD_SECONDS) return 'ended';
-  const isComplete = Boolean(metadata?.complete ?? metadata?.is_complete ?? false);
-  return isComplete ? 'ended' : 'archived';
+function classifyStreamAge(ageSeconds: number | null): { status: DashboardStream['status']; countdownSeconds: number | null } | null {
+  if (ageSeconds === null || !Number.isFinite(ageSeconds)) return null;
+  if (ageSeconds <= LIVE_THRESHOLD_SECONDS) {
+    return { status: 'live', countdownSeconds: null };
+  }
+
+  if (ageSeconds <= DROP_THRESHOLD_SECONDS) {
+    return { status: 'disconnecting', countdownSeconds: Math.max(0, DROP_THRESHOLD_SECONDS - ageSeconds) };
+  }
+
+  return null;
 }
 
 function buildTotals(streams: DashboardStream[]): DashboardTotals {
   let totalStreams = 0;
   let liveStreams = 0;
-  let coolingStreams = 0;
-  let endedStreams = 0;
+  let disconnectingStreams = 0;
   let totalLiveViewers = 0;
   let totalLiveMarketCap = 0;
 
@@ -128,18 +136,15 @@ function buildTotals(streams: DashboardStream[]): DashboardTotals {
       liveStreams += 1;
       totalLiveViewers += stream.metrics.viewers.current ?? 0;
       totalLiveMarketCap += stream.metrics.marketCap.current ?? 0;
-    } else if (stream.status === 'cooldown') {
-      coolingStreams += 1;
-    } else if (stream.status === 'ended') {
-      endedStreams += 1;
+    } else if (stream.status === 'disconnecting') {
+      disconnectingStreams += 1;
     }
   }
 
   return {
     totalStreams,
     liveStreams,
-    coolingStreams,
-    endedStreams,
+    disconnectingStreams,
     totalLiveViewers,
     totalLiveMarketCap,
   };
@@ -166,12 +171,13 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
         totals: {
           totalStreams: 0,
           liveStreams: 0,
-          coolingStreams: 0,
-          endedStreams: 0,
+          disconnectingStreams: 0,
           totalLiveViewers: 0,
           totalLiveMarketCap: 0,
         },
         events: [],
+        latestSnapshotAt: null,
+        oldestSnapshotAgeSeconds: null,
       };
     }
     throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
@@ -232,41 +238,27 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
 
   const nowMs = Date.now();
 
-  const streams: DashboardStream[] = mintOrder.map((mintId) => {
+  const streams: DashboardStream[] = [];
+
+  for (const mintId of mintOrder) {
     const latest = latestByMint.get(mintId);
     const metadata = metadataMap.get(mintId) ?? null;
-    if (!latest) {
-      return {
-        mintId,
-        name: metadata?.name ?? null,
-        symbol: metadata?.symbol ?? null,
-        thumbnail: metadata?.thumbnail ?? null,
-        status: 'ended',
-        latestAt: null,
-        metrics: {
-          lastSnapshotAgeSeconds: null,
-          viewers: {
-            current: null,
-            peak: null,
-            momentum: { delta5m: null, delta15m: null, velocityPerMin: null },
-          },
-          marketCap: {
-            current: null,
-            momentum: { delta5m: null, delta15m: null, velocityPerMin: null },
-          },
-        },
-        sparkline: [],
-        score: 0,
-        metadata,
-      };
+    if (!latest || !latest.fetched_at) {
+      continue;
     }
 
     const history = historyMap.get(mintId) ?? [];
     const trimmedHistory = HISTORY_MAX_POINTS > 0 ? history.slice(-HISTORY_MAX_POINTS) : history;
 
-    const latestAt = latest.fetched_at ?? null;
-    const latestTimestamp = latestAt ? new Date(latestAt).getTime() : null;
-    const ageSeconds = latestTimestamp ? Math.max(0, Math.floor((nowMs - latestTimestamp) / 1000)) : null;
+    const latestAt = latest.fetched_at;
+    const latestTimestamp = new Date(latestAt).getTime();
+    const ageSeconds = Number.isFinite(latestTimestamp) ? Math.max(0, Math.floor((nowMs - latestTimestamp) / 1000)) : null;
+    const classification = classifyStreamAge(ageSeconds);
+    if (!classification) {
+      continue;
+    }
+
+    const { status, countdownSeconds } = classification;
 
     const currentViewers = latest.num_participants ?? null;
     const currentMarketCap = latest.market_cap ?? null;
@@ -305,21 +297,11 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
     })();
 
     const simplified = latest.livestream ?? null;
-    const status = inferStatus(ageSeconds, metadata);
-    let freshnessWeight = 0.05;
-    if (status === 'live') {
-      freshnessWeight = 1;
-    } else if (status === 'cooldown') {
-      freshnessWeight = 0.2;
-    } else if (status === 'ended') {
-      freshnessWeight = 0.05;
-    } else {
-      freshnessWeight = 0.001;
-    }
     const momentumBoost = Math.max(viewerMomentum.delta5m ?? 0, 0);
+    const freshnessWeight = status === 'live' ? 1 : 0.04;
     const score = ((currentViewers ?? 0) + momentumBoost) * freshnessWeight;
 
-    return {
+    streams.push({
       mintId,
       name: (metadata?.name as string | undefined) ?? (simplified?.name as string | undefined) ?? null,
       symbol: (metadata?.symbol as string | undefined) ?? (simplified?.symbol as string | undefined) ?? null,
@@ -330,6 +312,7 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
         null,
       status,
       latestAt,
+      dropCountdownSeconds: countdownSeconds,
       metrics: {
         lastSnapshotAgeSeconds: ageSeconds,
         viewers: {
@@ -345,10 +328,27 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
       sparkline: trimmedHistory,
       score,
       metadata,
-    };
-  });
+    });
+  }
 
   const totals = buildTotals(streams);
+
+  let latestSnapshotAt: string | null = null;
+  let oldestSnapshotAgeSeconds: number | null = null;
+  for (const stream of streams) {
+    if (stream.latestAt) {
+      const ts = new Date(stream.latestAt).getTime();
+      if (Number.isFinite(ts)) {
+        if (!latestSnapshotAt || ts > new Date(latestSnapshotAt).getTime()) {
+          latestSnapshotAt = stream.latestAt;
+        }
+      }
+    }
+    const age = stream.metrics.lastSnapshotAgeSeconds;
+    if (age !== null && age !== undefined) {
+      oldestSnapshotAgeSeconds = oldestSnapshotAgeSeconds === null ? age : Math.max(oldestSnapshotAgeSeconds, age);
+    }
+  }
 
   const spotlight = [...streams]
     .filter((stream) => stream.status === 'live')
@@ -358,12 +358,12 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
   const events: DashboardEvent[] = [];
   for (const stream of streams) {
     const delta5 = stream.metrics.viewers.momentum.delta5m ?? 0;
-    const age = stream.metrics.lastSnapshotAgeSeconds ?? null;
-    if (stream.status === 'cooldown' && (stream.metrics.viewers.current ?? 0) > 0) {
+    if (stream.status === 'disconnecting') {
+      const remaining = Math.max(0, stream.dropCountdownSeconds ?? 0);
       events.push({
         type: 'drop',
         mintId: stream.mintId,
-        message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} audio/video offline ${age !== null ? `${Math.floor(age)}s` : ''} ago`,
+        message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} signal lost · removing in ${remaining}s`,
         severity: 'warning',
         timestamp: stream.latestAt,
       });
@@ -395,6 +395,8 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
     spotlight,
     totals,
     events: events.slice(0, 12),
+    latestSnapshotAt,
+    oldestSnapshotAgeSeconds,
   };
 }
 
@@ -402,5 +404,7 @@ export function getDashboardConfig() {
   return {
     topLimit: TOP_LIMIT,
     lookbackMinutes: LOOKBACK_MINUTES,
+    pollerIntervalSeconds: LIVE_THRESHOLD_SECONDS,
+    dropThresholdSeconds: DROP_THRESHOLD_SECONDS,
   };
 }
