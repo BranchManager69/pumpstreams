@@ -64,11 +64,6 @@ export default async function DashboardPage() {
       <div className="site-shell">
         <SiteHeader />
         <main>
-          <header>
-            <h1>Pumpstreams Live Dashboard</h1>
-            <p>Live attention tracker for Pump.fun streams. Fresh data, no ghosts.</p>
-          </header>
-
           <DashboardLive initialPayload={payload} />
         </main>
         <SiteFooter />

@@ -179,7 +179,7 @@ header p {
   top: clamp(5.5rem, 8vw, 6.5rem);
   z-index: 20;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: clamp(0.75rem, 2vw, 1.5rem);
   padding: 0.85rem 1.1rem;
@@ -188,14 +188,6 @@ header p {
   border: 1px solid rgba(53, 196, 162, 0.35);
   box-shadow: 0 18px 40px rgba(3, 10, 19, 0.45);
   backdrop-filter: blur(14px);
-}
-
-.command-bar .brand {
-  font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #4fffd1;
 }
 
 .command-bar .summary {
@@ -259,32 +251,6 @@ header p {
   font: inherit;
 }
 
-.command-bar .status-toggle {
-  display: inline-grid;
-  grid-auto-flow: column;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(79, 255, 209, 0.25);
-  background: rgba(5, 12, 24, 0.7);
-}
-
-.command-bar .status-toggle button {
-  border: none;
-  background: transparent;
-  color: rgba(198, 228, 255, 0.75);
-  padding: 0.42rem 0.85rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-  white-space: nowrap;
-}
-
-.command-bar .status-toggle button.active {
-  background: rgba(79, 255, 209, 0.25);
-  color: #ecfff9;
-}
 
 .spotlight-reel {
   display: grid;
@@ -882,18 +848,7 @@ header p {
     width: 100%;
   }
 
-  .command-bar .status-toggle {
-    order: 3;
   }
-
-  .leaderboard-table-wrapper {
-    display: none;
-  }
-
-  .leaderboard-mobile {
-    display: grid;
-  }
-}
 
 @media (max-width: 720px) {
   .site-header {

@@ -7,14 +7,18 @@ export type StreamCardProps = {
   stream: DashboardStream;
   rank: number;
   ageOffsetSeconds: number;
+  priceUsd?: number | null;
 };
 
-export function StreamCard({ stream, rank, ageOffsetSeconds }: StreamCardProps) {
-  const { priceUsd } = useSolPrice();
+export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdProp }: StreamCardProps) {
+  const { priceUsd: priceUsdContext } = useSolPrice();
+  const priceUsd = priceUsdProp ?? priceUsdContext;
+
   return (
     <article className={`mobile-card mobile-${stream.status}`}>
       <header>
         <div className="rank">#{rank}</div>
+        <div className="thumb" style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }} />
         <div>
           <h3>{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</h3>
           <span className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</span>
@@ -38,17 +42,25 @@ export function StreamCard({ stream, rank, ageOffsetSeconds }: StreamCardProps) 
         </div>
       </header>
       <div className="hero-line">
-        <strong>{(stream.metrics.viewers.current ?? 0).toLocaleString()}</strong>
+        <strong>{formatViewerCount(stream.metrics.viewers.current)}</strong>
         <span>viewers</span>
       </div>
-      <div className="second-line">
-        <span className="market-line">MC {formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
+      <div className="secondary-line">
+        <span className="metric">MC {formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
+        <span className="metric">$/Viewer {formatMarketPerViewer(stream.metrics.marketCap.current, stream.metrics.viewers.current, priceUsd)}</span>
       </div>
       <footer>
         <span className="mint">{stream.mintId.slice(0, 4)}…{stream.mintId.slice(-4)}</span>
       </footer>
     </article>
   );
+}
+
+function formatViewerCount(count: number | null): string {
+  if (count === null || !Number.isFinite(count)) return '—';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return count.toLocaleString();
 }
 
 function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
@@ -58,6 +70,17 @@ function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
   if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
   if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
   return `$${(usd / 1_000).toFixed(1)}K`;
+}
+
+function formatMarketPerViewer(sol: number | null, viewers: number | null, priceUsd: number | null): string {
+  if (sol === null || viewers === null || viewers <= 0 || !Number.isFinite(viewers) || priceUsd === null || !Number.isFinite(priceUsd)) {
+    return '$—';
+  }
+  const usd = sol * priceUsd;
+  const ratio = usd / viewers;
+  if (ratio < 1_000) return '<$1.0K';
+  if (ratio >= 1_000_000) return `$${(ratio / 1_000_000).toFixed(1)}M`;
+  return `$${(ratio / 1_000).toFixed(1)}K`;
 }
 
 function formatAge(age: number | null, offsetSeconds = 0): string {

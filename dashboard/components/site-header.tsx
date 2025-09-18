@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useMemo } from 'react';
 import { useSolPrice } from './sol-price-context';
 
@@ -21,10 +22,10 @@ export function SiteHeader() {
 
   return (
     <header className="site-header">
-      <div className="site-header__brand">
+      <Link href="/" className="site-header__brand" aria-label="Pumpstreams home">
         <span className="site-header__logo">Pumpstreams</span>
         <span className="site-header__tagline">Live attention tracker</span>
-      </div>
+      </Link>
       <button
         type="button"
         className={`site-header__ticker${isError ? ' site-header__ticker--error' : ''}`}

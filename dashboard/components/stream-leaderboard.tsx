@@ -35,7 +35,7 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
               <th>Stream</th>
               <th className="align-right">Viewers</th>
               <th className="align-right">Mkt Cap</th>
-              <th>Preview</th>
+              <th className="align-right">$/Viewer</th>
             </tr>
           </thead>
           <tbody>
@@ -51,37 +51,22 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
                     <tr key={stream.mintId} className={stream.status === 'disconnecting' ? 'status-disconnecting' : ''}>
                       <td>{index + 1}</td>
                       <td className="cell-stream">
-                        <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
-                        <div className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</div>
+                        <div
+                          className="stream-thumb"
+                          style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }}
+                        />
+                        <div className="stream-meta">
+                          <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
+                          <div className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</div>
+                          <div className="age-label">{formatAge(stream.metrics.lastSnapshotAgeSeconds, ageOffsetSeconds)}</div>
+                        </div>
                       </td>
-                      <td className="align-right viewers-cell">{(stream.metrics.viewers.current ?? 0).toLocaleString()}</td>
+                      <td className="align-right viewers-cell">{formatViewerCount(stream.metrics.viewers.current)}</td>
                       <td className="align-right">
                         <span className="market-chip">{formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
                       </td>
-                      <td>
-                        <div
-                          className={`preview-thumb${stream.status === 'disconnecting' ? ' preview-thumb--disconnecting' : ''}`}
-                          style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }}
-                        >
-                          <span>{formatAge(stream.metrics.lastSnapshotAgeSeconds, ageOffsetSeconds)}</span>
-                          {stream.status === 'disconnecting' && (
-                            <div
-                              className="preview-thumb__overlay"
-                              role="status"
-                              aria-label={`Signal lost, removing in ${Math.max(
-                                0,
-                                (stream.dropCountdownSeconds ?? 0) - ageOffsetSeconds
-                              )} seconds`}
-                            >
-                              <div className="disconnect-ring">
-                                <span className="disconnect-seconds">
-                                  {formatCountdown(stream.dropCountdownSeconds, ageOffsetSeconds)}
-                                </span>
-                              </div>
-                              <span className="disconnect-label">Signal lost</span>
-                            </div>
-                          )}
-                        </div>
+                      <td className="align-right ratio-cell">
+                        {formatMarketPerViewer(stream.metrics.marketCap.current, stream.metrics.viewers.current, priceUsd)}
                       </td>
                     </tr>
                   ))}
@@ -94,11 +79,24 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
 
       <div className="leaderboard-mobile">
         {streams.map((stream, index) => (
-          <StreamCard key={stream.mintId} stream={stream} rank={index + 1} ageOffsetSeconds={ageOffsetSeconds} />
+          <StreamCard
+            key={stream.mintId}
+            stream={stream}
+            rank={index + 1}
+            ageOffsetSeconds={ageOffsetSeconds}
+            priceUsd={priceUsd}
+          />
         ))}
       </div>
     </section>
   );
+}
+
+function formatViewerCount(count: number | null): string {
+  if (count === null || !Number.isFinite(count)) return '—';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return count.toLocaleString();
 }
 
 function formatAge(age: number | null, offsetSeconds = 0): string {
@@ -125,4 +123,15 @@ function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
   if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
   if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
   return `$${(usd / 1_000).toFixed(1)}K`;
+}
+
+function formatMarketPerViewer(sol: number | null, viewers: number | null, priceUsd: number | null): string {
+  if (sol === null || viewers === null || viewers <= 0 || !Number.isFinite(viewers) || priceUsd === null || !Number.isFinite(priceUsd)) {
+    return '$—';
+  }
+  const usd = sol * priceUsd;
+  const ratio = usd / viewers;
+  if (ratio < 1_000) return '<$1.0K';
+  if (ratio >= 1_000_000) return `$${(ratio / 1_000_000).toFixed(1)}M`;
+  return `$${(ratio / 1_000).toFixed(1)}K`;
 }

@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { DashboardPayload } from '../types/dashboard';
-import type { DashboardStream, StreamStatus } from '../lib/types';
+import type { DashboardStream } from '../lib/types';
 import { LiveLeaderboard } from './stream-leaderboard';
 import { SpotlightReel } from './spotlight-reel';
 import { DebugConsole } from './debug-console';
@@ -26,13 +25,11 @@ type ApiResponse = DashboardPayload & {
 
 type FiltersState = {
   search: string;
-  statuses: Set<StreamStatus>;
 };
 
 function createInitialFilters(): FiltersState {
   return {
     search: '',
-    statuses: new Set<StreamStatus>(['live', 'disconnecting']),
   };
 }
 
@@ -159,7 +156,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
   const filteredStreams = useMemo(() => {
     const query = filters.search.trim().toLowerCase();
     return payload.streams
-      .filter((stream) => filters.statuses.has(stream.status))
       .filter((stream) => {
         if (!query) return true;
         const name = stream.name?.toLowerCase() ?? '';
@@ -168,7 +164,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         return name.includes(query) || symbol.includes(query) || mint.includes(query);
       })
       .sort((a, b) => b.score - a.score);
-  }, [payload.streams, filters]);
+  }, [payload.streams, filters.search]);
 
   const spotlightStreams = payload.spotlight;
 
@@ -183,7 +179,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     return total * priceUsd;
   }, [payload.totals.totalLiveMarketCap, priceUsd]);
 
-  const lastPollCompact = useMemo(() => compactTime(lastPollLabel), [lastPollLabel]);
   const lastUpdatedCompact = useMemo(() => compactTime(lastUpdatedLabel), [lastUpdatedLabel]);
   const oldestSampleCompact = oldestSampleLabel ?? '—';
   const viewersCompact = formatWhole(payload.totals.totalLiveViewers);
@@ -218,7 +213,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         title: 'Filters',
         entries: [
           { label: 'Search', value: filters.search || '(none)' },
-          { label: 'Statuses', value: Array.from(filters.statuses).join(', ') },
         ],
       },
     ];
@@ -226,7 +220,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     ageOffsetSeconds,
     fetchState,
     filters.search,
-    filters.statuses,
     lastPollLabel,
     lastUpdatedLabel,
     payload.generatedAt,
@@ -240,21 +233,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     totalMarketCapUsd,
   ]);
 
-  function toggleStatus(status: StreamStatus) {
-    setFilters((prev) => {
-      const next = new Set(prev.statuses);
-      if (next.has(status)) {
-        next.delete(status);
-      } else {
-        next.add(status);
-      }
-      if (!next.size) {
-        next.add('live');
-      }
-      return { ...prev, statuses: next };
-    });
-  }
-
   return (
     <section className="dashboard-shell">
       <DebugConsole open={showDebug} onClose={() => setShowDebug(false)} sections={debugSections} />
@@ -267,9 +245,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         </div>
       )}
       <header className="command-bar">
-        <Link href="/" className="brand">
-          Pumpstreams
-        </Link>
         <div className="summary">
           <span className="summary-chip" title="Live streams">
             <abbr aria-hidden="true">LIVE</abbr>
@@ -287,10 +262,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
             <abbr aria-hidden="true">MCAP</abbr>
             <strong>{marketCapCompact}</strong>
           </span>
-          <span className="summary-chip" title="Last poll delta">
-            <abbr aria-hidden="true">LP</abbr>
-            <strong>{lastPollCompact}</strong>
-          </span>
           <span className="summary-chip" title="Oldest sample age">
             <abbr aria-hidden="true">OS</abbr>
             <strong>{oldestSampleCompact}</strong>
@@ -307,18 +278,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
             placeholder="Search stream or mint"
             aria-label="Search streams"
           />
-          <div className="status-toggle">
-            {(['live', 'disconnecting'] as StreamStatus[]).map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={filters.statuses.has(status) ? 'active' : ''}
-                onClick={() => toggleStatus(status)}
-              >
-                {status === 'live' ? 'Live' : 'Signal lost'}
-              </button>
-            ))}
-          </div>
           <button type="button" className="debug-toggle" onClick={() => setShowDebug((open) => !open)}>
             {showDebug ? 'Hide debug' : 'Show debug'}
           </button>
