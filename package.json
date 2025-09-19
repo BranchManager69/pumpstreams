@@ -13,6 +13,7 @@
     "live": "node cli/index.mjs live",
     "investigate": "node cli/index.mjs investigate",
     "subscribe": "node cli/index.mjs subscribe",
+    "capture": "node cli/index.mjs capture",
     "poller": "node cli/index.mjs poller",
     "analyze": "node cli/index.mjs analyze",
     "cleanup:snapshots": "node ./cli/scripts/prune-snapshots.mjs",
@@ -39,6 +40,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.891.0",
     "@livekit/rtc-node": "^0.13.18",
+    "@modelcontextprotocol/sdk": "^1.18.1",
     "@prisma/client": "^6.16.2",
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^16.6.1",

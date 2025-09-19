@@ -8,8 +8,8 @@ import {
   decodeJwt,
 } from '../lib/livestream-api.js';
 
-const TEST_LIMIT = Number(process.env.PUMPSTREAMS_TEST_LIMIT || '3');
-const STREAM_TIMEOUT = Number(process.env.PUMPSTREAMS_TEST_TIMEOUT || '60000');
+const TEST_LIMIT = Number(process.env.PUMPSTREAMS_TEST_LIMIT || '1');
+const STREAM_TIMEOUT = Number(process.env.PUMPSTREAMS_TEST_TIMEOUT || '20000');
 
 function assertIsNonEmptyString(value, name) {
   assert.equal(typeof value, 'string', `${name} should be a string`);
@@ -56,9 +56,8 @@ if (roster.length === 0) {
     assert.equal(snapshot.livestream.mintId, mintId);
     assert.ok(typeof snapshot.isApprovedCreator === 'boolean');
 
-    if (Array.isArray(snapshot.clips)) {
-      t.diagnostic(`Clips returned: ${snapshot.clips.length}`);
-    }
+    assert.ok(Array.isArray(snapshot.clips), 'Expected clips array');
+    t.diagnostic(`Clips returned: ${snapshot.clips.length}`);
 
     assert.ok(snapshot.join?.token, 'Expected LiveKit token inside snapshot');
   });

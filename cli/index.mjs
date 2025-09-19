@@ -75,6 +75,13 @@ const COMMANDS = [
     warnsOnWrite: true,
   },
   {
+    name: 'capture',
+    script: 'capture-livestream.mjs',
+    description: 'Record a livestream clip and archive it to S3/Supabase.',
+    aliases: ['clip'],
+    warnsOnWrite: true,
+  },
+  {
     name: 'investigate',
     script: 'live-investigator.mjs',
     description: 'Headless recon of pump.fun/live with assets.',

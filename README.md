@@ -28,6 +28,19 @@ Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and
 - **Browser recon capture** – Puppeteer script records `/live` page artifacts plus an optional first-stream detail for reference.
 - **Configurable + automation-friendly** – environment variables drive both local Supabase stacks and cloud deployments; Prisma client generation now runs automatically.
 
+## Preview
+
+<p align="center">
+  <video src="https://docs.dexter.cash/previews/pumpstreams.webm"
+         poster="https://docs.dexter.cash/previews/pumpstreams.png"
+         width="960"
+         autoplay
+         loop
+         muted
+         playsinline>
+  </video>
+</p>
+
 ---
 
 ## Dexter Stack
