@@ -1,8 +1,22 @@
-# PumpStreams
+<p align="center">
+  <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0ODAgMTYwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwZjE3MmEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMWUyOTNiIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB4PSIxMiIgeT0iMTIiIHdpZHRoPSI0NTYiIGhlaWdodD0iMTM2IiByeD0iMjQiIGZpbGw9InVybCgjZ3JhZCkiIHN0cm9rZT0iIzMzNDE1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHJlY3QgeD0iMjIiIHk9IjIyIiB3aWR0aD0iNDM2IiBoZWlnaHQ9IjExNiIgcng9IjE4IiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS1vcGFjaXR5PSIwLjQ1IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8dGV4dCB4PSI1MCUiIHk9Ijc0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZTBmMmZlIiBmb250LWZhbWlseT0iJ1NGIFBybyBEaXNwbGF5JywnU2Vnb2UgVUknLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNDgiIGZvbnQtd2VpZ2h0PSI2MDAiIGxldHRlci1zcGFjaW5nPSI0Ij5ERVhURVI8L3RleHQ+CiAgPHRleHQgeD0iNTAlIiB5PSIxMTYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMzOGJkZjgiIGZvbnQtZmFtaWx5PSInU0YgTW9ubycsJ0pldEJyYWlucyBNb25vJywnRmlyYSBDb2RlJyxtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMjgiIGxldHRlci1zcGFjaW5nPSIxMCI+U1RBQ0s8L3RleHQ+Cjwvc3ZnPgo=" alt="Dexter Stack wordmark" width="360">
+</p>
 
-[![Node.js](https://img.shields.io/badge/node-%3E=20.0-green.svg)](https://nodejs.org/en/download)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Live Endpoints](https://img.shields.io/badge/pump.fun-live%20API-success.svg)](https://pump.fun/live)
+<p align="center">
+  <a href="https://github.com/BranchManager69/dexter-api">Dexter API</a>
+  · <a href="https://github.com/BranchManager69/dexter-fe">Dexter FE</a>
+  · <a href="https://github.com/BranchManager69/dexter-mcp">Dexter MCP</a>
+  · <a href="https://github.com/BranchManager69/dexter-ops">Dexter Ops</a>
+  · <strong>PumpStreams</strong>
+</p>
+
+<h1 align="center">PumpStreams</h1>
+
+<p align="center">
+  <a href="https://nodejs.org/en/download"><img src="https://img.shields.io/badge/node-%3E=20.0-green.svg" alt="Node >=20"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://pump.fun/live"><img src="https://img.shields.io/badge/pump.fun-live%20API-success.svg" alt="pump.fun live"></a>
+</p>
 
 Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and livestream stack. It discovers active rooms, captures WebSocket traffic, records LiveKit metadata, and now surfaces the results through a live dashboard (with the legacy CLI still available for diagnostics).
 
@@ -13,6 +27,17 @@ Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and
 - **Targeted diagnostics** – CLI helpers fetch livestream metadata (optional clip metadata and join-token preview) and sample LiveKit sessions for troubleshooting.
 - **Browser recon capture** – Puppeteer script records `/live` page artifacts plus an optional first-stream detail for reference.
 - **Configurable + automation-friendly** – environment variables drive both local Supabase stacks and cloud deployments; Prisma client generation now runs automatically.
+
+---
+
+## Dexter Stack
+
+| Repo | Role |
+|------|------|
+| [`dexter-api`](https://github.com/BranchManager69/dexter-api) | Issues realtime tokens, proxies MCP, x402 billing |
+| [`dexter-fe`](https://github.com/BranchManager69/dexter-fe) | Next.js frontend for voice/chat surfaces |
+| [`dexter-mcp`](https://github.com/BranchManager69/dexter-mcp) | Hosted MCP transport powering tool access |
+| [`dexter-ops`](https://github.com/BranchManager69/dexter-ops) | Shared operations scripts, PM2 config, nginx templates |
 
 ---
 
@@ -82,6 +107,16 @@ Common uses today:
 - Re-run the Puppeteer recon: `npm run cli -- investigate` (scrolls through multiple `/live` segments, captures artifacts, and clicks the first stream card once).
 
 Anything beyond those tasks should be treated as legacy; consult the built-in help output before relying on older commands.
+
+### MCP proxy helper
+
+To bridge the hosted Dexter MCP endpoint into a local stdio transport, run:
+
+```bash
+node tools/mcp-http-proxy.mjs --url https://mcp.dexter.cash/mcp --bearer "$TOKEN_AI_MCP_TOKEN"
+```
+
+The proxy opens a Streamable HTTP connection to the remote server and forwards all JSON-RPC traffic over stdio, making it compatible with Codex or any other local MCP client. You can add `-H "Header: value"` for custom headers and `-v` for verbose logging.
 
 ## Testing
 
