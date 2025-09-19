@@ -95,7 +95,7 @@ function bufferFromTypedArray(view) {
   return Buffer.from(view.buffer, view.byteOffset, view.byteLength);
 }
 
-async function recordAudio(track, outputPath) {
+async function recordAudio(track, outputPath, { signal } = {}) {
   return new Promise(async (resolve, reject) => {
     const args = [
       '-loglevel', 'error',
@@ -110,6 +110,7 @@ async function recordAudio(track, outputPath) {
 
     const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
     const errorChunks = [];
+    let aborted = false;
 
     ffmpeg.stderr.on('data', (chunk) => {
       errorChunks.push(chunk.toString());
@@ -120,7 +121,10 @@ async function recordAudio(track, outputPath) {
     });
 
     ffmpeg.on('close', (code) => {
-      if (code === 0 || code === null) {
+      if (signalListener) {
+        signal?.removeEventListener('abort', signalListener);
+      }
+      if (code === 0 || code === null || aborted) {
         resolve();
       } else {
         reject(new Error(`ffmpeg audio exited with code ${code}: ${errorChunks.join('')}`));
@@ -130,11 +134,39 @@ async function recordAudio(track, outputPath) {
     const stream = new AudioStream(track, { sampleRate: 48000, numChannels: 1 });
     const reader = stream.getReader();
 
+    const stopRecording = () => {
+      if (aborted) return;
+      aborted = true;
+      try {
+        reader.cancel().catch(() => {});
+      } catch {}
+      try {
+        stream.cancel().catch(() => {});
+      } catch {}
+      try {
+        ffmpeg.stdin.end();
+      } catch {}
+      try {
+        ffmpeg.kill('SIGINT');
+      } catch {}
+    };
+
+    let signalListener = null;
+    if (signal) {
+      signalListener = () => stopRecording();
+      if (signal.aborted) {
+        stopRecording();
+      } else {
+        signal.addEventListener('abort', signalListener, { once: true });
+      }
+    }
+
     try {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
+        if (aborted || signal?.aborted) break;
         const chunk = bufferFromTypedArray(value.data);
         try {
           if (!ffmpeg.stdin.write(chunk)) {
@@ -148,20 +180,61 @@ async function recordAudio(track, outputPath) {
         }
       }
     } catch (error) {
-      reject(error);
+      if (!aborted) {
+        reject(error);
+        return;
+      }
     } finally {
-      ffmpeg.stdin.end();
+      try {
+        reader.releaseLock?.();
+      } catch {}
+      try {
+        stream.cancel().catch(() => {});
+      } catch {}
+      try {
+        ffmpeg.stdin.end();
+      } catch {}
     }
   });
 }
 
-async function recordVideo(track, outputPath) {
+async function recordVideo(track, outputPath, { signal } = {}) {
   return new Promise(async (resolve, reject) => {
     const stream = new VideoStream(track);
     const reader = stream.getReader();
     let ffmpeg = null;
     const errorChunks = [];
     let frameCount = 0;
+    let aborted = false;
+
+    const stopRecording = () => {
+      if (aborted) return;
+      aborted = true;
+      try {
+        reader.cancel().catch(() => {});
+      } catch {}
+      try {
+        stream.cancel().catch(() => {});
+      } catch {}
+      if (ffmpeg) {
+        try {
+          ffmpeg.stdin.end();
+        } catch {}
+        try {
+          ffmpeg.kill('SIGINT');
+        } catch {}
+      }
+    };
+
+    let signalListener = null;
+    if (signal) {
+      signalListener = () => stopRecording();
+      if (signal.aborted) {
+        stopRecording();
+      } else {
+        signal.addEventListener('abort', signalListener, { once: true });
+      }
+    }
 
     const startFfmpeg = (width, height) => {
       const args = [
@@ -184,10 +257,16 @@ async function recordVideo(track, outputPath) {
         errorChunks.push(chunk.toString());
       });
       ffmpeg.on('error', (error) => {
+        if (signalListener) {
+          signal?.removeEventListener('abort', signalListener);
+        }
         reject(new Error(`ffmpeg video spawn failed: ${error.message}`));
       });
       ffmpeg.on('close', (code) => {
-        if (code === 0 || code === null) {
+        if (signalListener) {
+          signal?.removeEventListener('abort', signalListener);
+        }
+        if (code === 0 || code === null || aborted) {
           resolve();
         } else {
           reject(new Error(`ffmpeg video exited with code ${code}: ${errorChunks.join('')}`));
@@ -200,6 +279,7 @@ async function recordVideo(track, outputPath) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
+        if (aborted || signal?.aborted) break;
         let frame = value.frame;
         if (!frame) continue;
         if (frame.type !== VideoBufferType.I420) {
@@ -225,12 +305,20 @@ async function recordVideo(track, outputPath) {
         }
       }
     } catch (error) {
-      reject(error);
-      return;
+      if (!aborted) {
+        reject(error);
+        return;
+      }
     } finally {
       if (ffmpeg) {
         ffmpeg.stdin.end();
       }
+      try {
+        reader.releaseLock?.();
+      } catch {}
+      try {
+        stream.cancel().catch(() => {});
+      } catch {}
     }
 
     if (frameCount === 0) {
@@ -330,8 +418,11 @@ async function main() {
 
   const audioDeferred = createDeferred('audio track');
   const videoDeferred = createDeferred('video track');
+  const captureController = new AbortController();
+  const captureSignal = captureController.signal;
   let audioCapturePromise = null;
   let videoCapturePromise = null;
+  const activePublications = new Set();
 
   let startedAt = null;
   let endedAt = null;
@@ -372,16 +463,32 @@ async function main() {
     const kind = publication?.kind ?? track.kind;
     const humanKind = kind === TrackKind.KIND_AUDIO ? 'audio' : kind === TrackKind.KIND_VIDEO ? 'video' : kind;
     console.log(`Subscribed to ${humanKind} track from ${participant?.identity ?? 'unknown'}`);
+    if (publication) {
+      activePublications.add(publication);
+    }
     if (kind === TrackKind.KIND_AUDIO && !audioDeferred.settled && !audioCapturePromise) {
-      audioCapturePromise = recordAudio(track, audioPath);
+      audioCapturePromise = recordAudio(track, audioPath, { signal: captureSignal });
       audioDeferred.resolve(track);
     } else if (kind === TrackKind.KIND_VIDEO && !videoDeferred.settled && !videoCapturePromise) {
-      videoCapturePromise = recordVideo(track, videoPath);
+      videoCapturePromise = recordVideo(track, videoPath, { signal: captureSignal });
       videoDeferred.resolve(track);
     }
   };
 
   room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+  room.on(RoomEvent.TrackUnsubscribed, (_, publication) => {
+    if (publication) {
+      activePublications.delete(publication);
+    }
+  });
+
+  captureSignal.addEventListener('abort', () => {
+    for (const publication of activePublications) {
+      try {
+        publication.setSubscribed(false);
+      } catch {}
+    }
+  }, { once: true });
 
   const waitMs = waitSec * 1000;
 
@@ -398,6 +505,9 @@ async function main() {
 
     const targetMs = finalDuration * 1000;
     await delay(targetMs);
+    if (!captureSignal.aborted) {
+      captureController.abort(new Error('capture duration reached'));
+    }
     await room.disconnect().catch(() => {});
     const captureResults = await Promise.allSettled([audioCapturePromise, videoCapturePromise].filter(Boolean));
     const failedCapture = captureResults.find((entry) => entry.status === 'rejected');
@@ -408,6 +518,9 @@ async function main() {
     }
     endedAt = new Date();
   } catch (error) {
+    if (!captureSignal.aborted) {
+      captureController.abort(error);
+    }
     stopViewerPolling();
     await room.disconnect().catch(() => {});
     console.error('Capture failed:', error.message);
@@ -499,6 +612,10 @@ async function main() {
     console.error('Upload failed:', uploadError.message);
     await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
     process.exit(1);
+  }
+
+  if (!captureSignal.aborted) {
+    captureController.abort(new Error('capture completed'));
   }
 
   if (outputDir) {
