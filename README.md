@@ -27,6 +27,9 @@ npm install
 cp .env.example .env.local
 supabase start               # launches the bundled Supabase warehouse on high ports
 
+# Prisma client (optional but recommended)
+npx prisma generate          # uses the schema pulled from Supabase migrations
+
 # Hosted analytics (optional)
 cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashboard
 ```
@@ -55,6 +58,13 @@ The repo supports two analytics back-ends out of the box:
   place, every CLI run will persist to the cloud project automatically.
 - **Local Supabase** – `supabase start` spins up a Postgres instance on ports `5542x`. Prefix commands with
   `PUMPSTREAMS_ENV_FILE=.env.local` whenever you want to target the local warehouse instead.
+
+### Prisma workflow
+
+- The repo now ships a generated Prisma client (`@prisma/client`).
+- Schema changes should continue to live in `supabase/migrations/*.sql`; the Supabase CLI remains the source of truth for applying them.
+- Run `supabase db reset --local --yes` to rebuild the local database from migrations, then `npm run prisma:pull` and `npm run prisma:generate` to refresh Prisma types.
+- Deployments regenerate the client automatically via the `postinstall` hook, so PM2 restarts always pick up the latest schema.
 
 ## WebSocket Endpoint
 

@@ -26,3 +26,5 @@ Thumbs.db
 
 # Honkit build output
 docs/_book/
+
+/lib/generated/prisma
