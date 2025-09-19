@@ -5,6 +5,7 @@ import type { DashboardPayload } from '../types/dashboard';
 import type { DashboardStream } from '../lib/types';
 import { LiveLeaderboard } from './stream-leaderboard';
 import { SpotlightReel } from './spotlight-reel';
+import { formatMetric, formatUsdCompact } from './metric-formatters';
 import { DebugConsole } from './debug-console';
 import { useSolPrice } from './sol-price-context';
 
@@ -179,10 +180,8 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     return total * priceUsd;
   }, [payload.totals.totalLiveMarketCap, priceUsd]);
 
-  const lastUpdatedCompact = useMemo(() => compactTime(lastUpdatedLabel), [lastUpdatedLabel]);
-  const oldestSampleCompact = oldestSampleLabel ?? '—';
-  const viewersCompact = formatWhole(payload.totals.totalLiveViewers);
-  const marketCapCompact = formatWhole(payload.totals.totalLiveMarketCap);
+  const viewersCompact = formatMetric(payload.totals.totalLiveViewers);
+  const marketCapUsdCompact = formatUsdCompact(totalMarketCapUsd);
 
   const debugSections = useMemo(() => {
     return [
@@ -221,7 +220,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     fetchState,
     filters.search,
     lastPollLabel,
-    lastUpdatedLabel,
     payload.generatedAt,
     payload.latestSnapshotAt,
     payload.oldestSnapshotAgeSeconds,
@@ -247,28 +245,20 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
       <header className="command-bar">
         <div className="summary">
           <span className="summary-chip" title="Live streams">
-            <abbr aria-hidden="true">LIVE</abbr>
+            <span className="chip-label">Live</span>
             <strong>{payload.totals.liveStreams}</strong>
           </span>
-          <span className="summary-chip" title="Signal lost">
-            <abbr aria-hidden="true">SIG</abbr>
+          <span className="summary-chip" title="Disconnecting streams">
+            <span className="chip-label">Drop</span>
             <strong>{payload.totals.disconnectingStreams}</strong>
           </span>
-          <span className="summary-chip" title="Viewers">
-            <abbr aria-hidden="true">VIEW</abbr>
+          <span className="summary-chip" title="Total viewers">
+            <span className="chip-label">View</span>
             <strong>{viewersCompact}</strong>
           </span>
-          <span className="summary-chip" title="Market cap (SOL)">
-            <abbr aria-hidden="true">MCAP</abbr>
-            <strong>{marketCapCompact}</strong>
-          </span>
-          <span className="summary-chip" title="Oldest sample age">
-            <abbr aria-hidden="true">OS</abbr>
-            <strong>{oldestSampleCompact}</strong>
-          </span>
-          <span className="summary-chip" title="UI data age">
-            <abbr aria-hidden="true">UI</abbr>
-            <strong>{lastUpdatedCompact}</strong>
+          <span className="summary-chip" title="Aggregate market cap (USD)">
+            <span className="chip-label">$ Cap</span>
+            <strong>{marketCapUsdCompact}</strong>
           </span>
         </div>
         <div className="actions">

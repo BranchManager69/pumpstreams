@@ -2,6 +2,8 @@
 
 import type { DashboardStream } from '../lib/types';
 import { useSolPrice } from './sol-price-context';
+import { formatAge, formatCountdown, formatMarketUsd, formatViewerCount } from './metric-formatters';
+import { ViewersPerKVisual } from './viewers-per-k';
 
 export type StreamCardProps = {
   stream: DashboardStream;
@@ -18,7 +20,14 @@ export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdP
     <article className={`mobile-card mobile-${stream.status}`}>
       <header>
         <div className="rank">#{rank}</div>
-        <div className="thumb" style={{ backgroundImage: `url(${stream.thumbnail ?? ''})` }} />
+        <div
+          className={`thumb${stream.thumbnail ? '' : ' thumb--fallback'}`}
+          style={stream.thumbnail ? { backgroundImage: `url(${stream.thumbnail})` } : undefined}
+        >
+          {!stream.thumbnail && (
+            <span className="thumb-initial">{(stream.symbol ?? stream.name ?? stream.mintId.slice(0, 2)).slice(0, 2).toUpperCase()}</span>
+          )}
+        </div>
         <div>
           <h3>{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</h3>
           <span className="meta">{stream.symbol ?? stream.mintId.slice(0, 8)}</span>
@@ -47,55 +56,19 @@ export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdP
       </div>
       <div className="secondary-line">
         <span className="metric">MC {formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
-        <span className="metric">$/Viewer {formatMarketPerViewer(stream.metrics.marketCap.current, stream.metrics.viewers.current, priceUsd)}</span>
+        <span className="metric metric--iconic">
+          <span className="metric__label">V/$1K</span>
+          <ViewersPerKVisual
+            solAmount={stream.metrics.marketCap.current}
+            viewerCount={stream.metrics.viewers.current}
+            priceUsd={priceUsd}
+            layout="card"
+          />
+        </span>
       </div>
       <footer>
         <span className="mint">{stream.mintId.slice(0, 4)}…{stream.mintId.slice(-4)}</span>
       </footer>
     </article>
   );
-}
-
-function formatViewerCount(count: number | null): string {
-  if (count === null || !Number.isFinite(count)) return '—';
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-  return count.toLocaleString();
-}
-
-function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
-  if (sol === null || !Number.isFinite(sol) || priceUsd === null || !Number.isFinite(priceUsd)) return '$—';
-  const usd = sol * priceUsd;
-  if (usd < 1_000) return '<$1.0K';
-  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
-  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
-  return `$${(usd / 1_000).toFixed(1)}K`;
-}
-
-function formatMarketPerViewer(sol: number | null, viewers: number | null, priceUsd: number | null): string {
-  if (sol === null || viewers === null || viewers <= 0 || !Number.isFinite(viewers) || priceUsd === null || !Number.isFinite(priceUsd)) {
-    return '$—';
-  }
-  const usd = sol * priceUsd;
-  const ratio = usd / viewers;
-  if (ratio < 1_000) return '<$1.0K';
-  if (ratio >= 1_000_000) return `$${(ratio / 1_000_000).toFixed(1)}M`;
-  return `$${(ratio / 1_000).toFixed(1)}K`;
-}
-
-function formatAge(age: number | null, offsetSeconds = 0): string {
-  if (age === null) return '—';
-  const total = Math.max(0, age + offsetSeconds);
-  if (total < 60) return `${total}s ago`;
-  const minutes = Math.floor(total / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
-}
-
-function formatCountdown(seconds: number | null, offsetSeconds = 0): string {
-  if (seconds === null) return '0s';
-  const remaining = Math.max(0, seconds - offsetSeconds);
-  if (remaining <= 0) return '0s';
-  return `${remaining}s`;
 }
