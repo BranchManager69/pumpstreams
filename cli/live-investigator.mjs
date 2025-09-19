@@ -8,6 +8,10 @@ const RUN_LABEL = new Date().toISOString().replace(/[:.]/g, '-');
 
 const interestingPattern = /(live|stream|broadcast|video|ivs|hls|playlist|websocket|socket|pump\.fun\/api|pumpportal|graphql|viewer|contract)/i;
 
+const SCROLL_ITERATIONS = Number(process.env.PUMPSTREAMS_INVESTIGATOR_SCROLLS ?? '6');
+const SCROLL_DELAY_MS = Number(process.env.PUMPSTREAMS_INVESTIGATOR_SCROLL_DELAY ?? '4000');
+const CAPTURE_SCROLL_SHOTS = process.env.PUMPSTREAMS_INVESTIGATOR_SCROLL_SHOTS !== '0';
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function ensureDir(dir) {
@@ -16,6 +20,92 @@ async function ensureDir(dir) {
 
 async function writeJson(filePath, data) {
   await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+}
+
+async function extractStreamCards(page) {
+  return await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll('a[href*="/live/"], a[href*="/coin/"]'));
+    return cards.map((card, index) => {
+      const rect = card.getBoundingClientRect();
+      const img = card.querySelector('img');
+      const badge = card.querySelector('[class*="Live" i], [data-testid*="live" i]');
+      const href = card.href;
+      const mintMatch = href && href.match(/([1-9A-HJ-NP-Za-km-z]{32,44})/);
+      return {
+        href,
+        mint: mintMatch ? mintMatch[1] : null,
+        text: card.innerText.slice(0, 200),
+        hasLiveBadge: Boolean(badge),
+        imageSrc: img?.src || null,
+        imageAlt: img?.alt || null,
+        boundingBox: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        index,
+      };
+    });
+  });
+}
+
+async function scrollAndHarvest(page, { iterations, delayMs, logDir, captureShots }) {
+  const aggregate = new Map();
+  const stats = [];
+
+  const record = (cards, iteration) => {
+    let added = 0;
+    cards.forEach((card) => {
+      const key = card.mint || card.href || `${card.text}-${card.index}`;
+      if (!aggregate.has(key)) {
+        aggregate.set(key, { ...card, discoveredAtScroll: iteration });
+        added += 1;
+      }
+    });
+    stats.push({ iteration, total: aggregate.size, added });
+    return added;
+  };
+
+  const initialCards = await extractStreamCards(page);
+  record(initialCards, 0);
+
+  if (iterations <= 0) {
+    return { cards: Array.from(aggregate.values()), stats, iterationsUsed: 0 };
+  }
+
+  let iterationsUsed = 0;
+  let stagnant = 0;
+
+  for (let i = 0; i < iterations; i += 1) {
+    iterationsUsed = i + 1;
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+    await sleep(delayMs);
+
+    if (captureShots) {
+      const shotPath = path.join(logDir, `pump-live-scroll-${String(iterationsUsed).padStart(2, '0')}.png`);
+      await page.screenshot({ path: shotPath, fullPage: true });
+    }
+
+    const cards = await extractStreamCards(page);
+    const added = record(cards, iterationsUsed);
+    if (added === 0) {
+      stagnant += 1;
+      if (stagnant >= 2) {
+        break;
+      }
+    } else {
+      stagnant = 0;
+    }
+  }
+
+  await page.evaluate(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  });
+  await sleep(750);
+
+  return {
+    cards: Array.from(aggregate.values()),
+    stats,
+    iterationsUsed,
+  };
 }
 
 async function main() {
@@ -225,6 +315,18 @@ async function main() {
     fullPage: true,
   });
 
+  const scrollCapture = await scrollAndHarvest(page, {
+    iterations: SCROLL_ITERATIONS,
+    delayMs: SCROLL_DELAY_MS,
+    logDir,
+    captureShots: CAPTURE_SCROLL_SHOTS,
+  });
+
+  result.streamCards = scrollCapture.cards;
+  result.scrollStats = scrollCapture.stats;
+  result.scrollIterationsConfigured = SCROLL_ITERATIONS;
+  result.scrollIterationsPerformed = scrollCapture.iterationsUsed;
+
   // Try to click the first live stream card for deeper discovery
   if (result.streamCards.length > 0) {
     console.log('Attempting to open first stream card...');
@@ -259,6 +361,14 @@ async function main() {
     target: TARGET_URL,
     runLabel: RUN_LABEL,
     streamCards: result.streamCards,
+    streamCardCount: result.streamCards.length,
+    scrollCapture: {
+      configuredIterations: SCROLL_ITERATIONS,
+      delayMs: SCROLL_DELAY_MS,
+      iterationsPerformed: scrollCapture.iterationsUsed,
+      screenshotsCaptured: CAPTURE_SCROLL_SHOTS ? scrollCapture.iterationsUsed : 0,
+      stats: scrollCapture.stats,
+    },
     nextDataExists: Boolean(result.nextData),
     globals: result.globals,
     consoleMessages,

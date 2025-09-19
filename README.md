@@ -4,15 +4,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live Endpoints](https://img.shields.io/badge/pump.fun-live%20API-success.svg)](https://pump.fun/live)
 
-Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and livestream stack. It discovers active rooms, captures WebSocket traffic, records LiveKit metadata, and surfaces everything through a clean CLI.
+Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and livestream stack. It discovers active rooms, captures WebSocket traffic, records LiveKit metadata, and now surfaces the results through a live dashboard (with the legacy CLI still available for diagnostics).
 
 ## Highlights
 
-- **Livestream discovery** – enumerate active coins with viewer counts, market caps, and thumbnails.
-- **Metadata deep dive** – fetch full livestream snapshots (clips, approval status, viewer tokens) in structured JSON.
-- **LiveKit session capture** – connect as a viewer, subscribe to tracks, and log participants/connection events.
-- **Browser-grade recon** – headless capture of `pump.fun/live`, including screenshots, DOM dumps, and network payloads.
-- **Configurable + automation-friendly** – environment variables for hosts/headers, file-based outputs, and live integration tests.
+- **Real-time dashboard** – Next.js UI surfaces the top livestreams with live viewer counts, market-cap chips, and ratio metrics backed by Supabase.
+- **Automated ingestion** – pollers persist `/live` rosters, hourly metrics, and snapshots (with S3 archiving) on a 30 s cadence.
+- **Targeted diagnostics** – CLI helpers fetch livestream metadata (optional clip metadata and join-token preview) and sample LiveKit sessions for troubleshooting.
+- **Browser recon capture** – Puppeteer script records `/live` page artifacts plus an optional first-stream detail for reference.
+- **Configurable + automation-friendly** – environment variables drive both local Supabase stacks and cloud deployments; Prisma client generation now runs automatically.
 
 ---
 
@@ -71,180 +71,17 @@ The repo supports two analytics back-ends out of the box:
 - **URL:** `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket`
 - **Protocol:** Socket.io v4 (`tradeCreated` is the primary event)
 
-## CLI & Automation Toolkit
+## Legacy CLI utilities
 
-All entry points share a single dispatcher. Run `npm run cli` for an interactive menu or `npm run cli -- --help` to see every command and alias.
+The original CLI remains for diagnostics and scripted exports, but the dashboard is the primary interface now. Every entry point has inline help—run `npm run cli -- --help` for the menu or append `--help` to any command (for example, `npm run live -- --help`, `npm run monitor -- --help`, or `npm run subscribe -- --help`).
 
-### WebSocket Monitors
+Common uses today:
 
-```bash
-# Connectivity smoke test
-npm run ws-test
+- Spot-check `/live` metadata: `npm run live -- list --json` (add `--clips` or `--includeToken` only when you explicitly need clip metadata or a short-lived join-token preview).
+- Capture a diagnostic LiveKit session: `npm run subscribe -- <mint> --duration 45 --json` (persists a session summary into Supabase’s `livestream_sessions`).
+- Re-run the Puppeteer recon: `npm run cli -- investigate` (scrolls through multiple `/live` segments, captures artifacts, and clicks the first stream card once).
 
-# Full monitor with stats + JSONL logging
-npm run monitor
-
-# With filters (5 SOL or $1k+ trades, stats disabled)
-npm run monitor -- --min-sol 5 --min-usd 1000 --no-stats
-```
-
-`npm run monitor` understands common toggles:
-- `--min-sol <amount>` – minimum trade size in SOL (defaults to `0.1`).
-- `--min-usd <amount>` – optional USD filter (shared SOL price cache refreshes every 15s by default).
-- `--stats` / `--no-stats` and `--stats-interval <seconds>` – control periodic summaries.
-- `--buys-only` / `--sells-only` – focus on one side of the order flow.
-- `--price-refresh-ms <ms>` – override the global SOL price refresh cadence.
-
-### Advanced Trade Explorer (`cli/advanced.mjs`)
-
-```bash
-npm run advanced -- --help
-npm run advanced -- --min-sol 1 --buys-only
-npm run advanced -- --token vW7pHSNTemdmLF4aUVe7u78itim4ksKy9UqxAgfpump
-npm run advanced -- --csv > trades.csv
-```
-
-### Livestream Catalogue (`cli/livestream-cli.mjs`)
-
-```bash
-# Top live streams with viewer counts + market caps
-npm run live -- --limit 10
-
-# Deep dive on a mint (clips + viewer token)
-npm run live -- info <mint> --clips --includeToken
-
-# Structured JSON output (auto filenames inside ./dumps)
-npm run live -- info <mint> --json --output dumps/
-
-# Inspect LiveKit regions used by a room
-npm run live -- regions <mint>
-
-# Emit raw JSON for scripting
-npm run live -- list --json
-
-# Persist snapshot for analytics, then print top movers
-npm run live -- info <mint> --json --output dumps/ && npm run analyze -- --limit 5
-```
-
-### Live Investigator (`cli/live-investigator.mjs`)
-Headless Puppeteer reconnaissance that captures screenshots, DOM summaries, WebSocket frames, and REST payloads powering `pump.fun/live`.
-
-Artifacts (HTML snapshot, JSON logs, PNG screenshots) are saved under `artifacts/<timestamp>/` for further analysis:
-
-```bash
-npm run investigate
-```
-
-### LiveKit Subscriber (`cli/livekit-subscriber.mjs`)
-Connects to a livestream room with the issued viewer token, listens for participants and tracks, and captures a structured session summary.
-
-```bash
-# Observe a room for 45 seconds, write summary JSON to ./captures/
-npm run subscribe -- <mint> --duration 45 --output captures/ --json
-
-# Quick peek with console output only
-npm run subscribe -- --mint <mint> --duration 20
-```
-
-Each subscriber run writes a structured session document to Supabase (`livestream_sessions`), which plugs
-directly into the analytics CLI: `npm run analyze -- --limit 10`.
-
-### Analytics Console
-
-```bash
-# Refresh hourly aggregates then dump the top streams as JSON
-PUMPSTREAMS_ENV_FILE=.env.local npm run analyze -- --refresh --json
-
-# Human-readable snapshot (top 10 by participants and trade flow)
-PUMPSTREAMS_ENV_FILE=.env.remote npm run analyze -- --limit 10
-```
-
-The analytics script pulls from the Supabase tables populated by the monitoring pipeline:
-
-| Table | Purpose |
-|-------|---------|
-| `tokens` | 1:1 catalogue of Pump.fun mints with core metadata |
-| `livestream_snapshots` | Time-series snapshots of livestream viewers/thumbnail/mode |
-| `livestream_sessions` | LiveKit subscriber session summaries (tracks, participants, duration) |
-| `livestream_regions` | Region latency probes tied to a snapshot |
-| `trade_events` | Raw trade feed captured from the WebSocket monitors |
-| `token_hourly_metrics` | Rolling per-token hourly volume/bias metrics |
-
-Views such as `token_latest_snapshot`, `token_trade_summary`, and `token_hourly_trend` power the console output.
-
-> Tip: omit `PUMPSTREAMS_ENV_FILE=…` to use the default `.env.remote` configuration; set
-> `PUMPSTREAMS_ENV_FILE=.env.local` when you want the bundled local stack.
-
-### Live Roster Poller
-
-Keep Supabase stocked with the `/live` roster by running the poller loop.
-
-```bash
-# Smoke test (single iteration)
-npm run poller -- --iterations 1 --limit 10
-
-# Continuous polling every 30s via PM2 (cloud by default)
-pm2 start ecosystem.config.cjs --only pumpstreams-api
-
-# Override interval/limit at launch
-pm2 start ecosystem.config.cjs --only pumpstreams-api \
-  --update-env --env LIVE_POLLER_INTERVAL_MS=15000 --env LIVE_POLLER_LIMIT=250
-
-# Watch the output
-pm2 logs pumpstreams-api
-```
-
-The poller reads `.env.remote` first, so cloud writes are automatic. To target the local warehouse, start PM2 with
-`PUMPSTREAMS_ENV_FILE=.env.local` in the environment.
-
-Default PM2 settings monitor the top **500** Pump.fun livestreams on a 30-second cadence. Tune `LIVE_POLLER_LIMIT`
-or `LIVE_POLLER_INTERVAL_MS` if you need lighter sampling.
-
-### Analytics Dashboard (Next.js + PM2)
-
-The repo ships with a self-hosted Next.js dashboard that surfaces the top 100 livestreams and their historical metrics.
-It listens on port **3050** by default and now presents a vertical leaderboard with live search, min-viewer filtering, and an
-"include inactive" toggle (helpful for keeping recent drop-offs visible). Infinite scroll lets you browse deeper into the
-buffer pulled from the 500-stream poller without overwhelming the initial view.
-
-```bash
-# Install dependencies (first time only)
-cd dashboard
-set -a && source ../.env.remote && npm install
-
-# Build for production (ensure Supabase env vars are present)
-set -a && source ../.env.remote && npm run build
-
-# Start under PM2 (from repo root)
-cd ..
-pm2 start ecosystem.config.cjs --only pumpstreams-fe
-
-# Tail the logs
-pm2 logs pumpstreams-fe
-```
-
-The dashboard uses Supabase service-role credentials at runtime (sourced from `.env.remote`). Adjust
-`DASHBOARD_TOP_LIMIT` (defaults to 100), `DASHBOARD_FETCH_LIMIT` (defaults to 500), `DASHBOARD_LOOKBACK_MINUTES`, or
-`DASHBOARD_STALE_THRESHOLD_MINUTES` to change the view. For local development:
-
-````bash
-cd dashboard
-set -a && source ../.env.remote && npm run dev
-```
-
-### Playwright Screenshots
-
-Automated screenshots run through Playwright and live alongside the dashboard.
-
-```bash
-cd dashboard
-set -a && source ../.env.remote
-npm run playwright:install      # one-time browser install
-npm run screenshots             # generates PNGs for desktop + mobile
-```
-
-PNG files are written to `dashboard/tests/playwright/screenshots/<project>/`. Modify
-`dashboard/tests/playwright/screenshots.spec.ts` to cover additional routes or adjust viewports.
+Anything beyond those tasks should be treated as legacy; consult the built-in help output before relying on older commands.
 
 ## Testing
 
@@ -289,117 +126,8 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
 | `DASHBOARD_HISTORY_MAX_POINTS` | `120` | Maximum number of points kept per sparkline history |
 
-Edit the config object in `cli/monitor.mjs` for WebSocket behaviour:
-
-```javascript
-const config = {
-  logToFile: true,              // Save logs to disk
-  logDir: './logs',             // Log directory
-  showBuys: true,               // Display buy trades
-  showSells: true,              // Display sell trades
-  minSolAmount: 0.1,            // Minimum SOL filter
-  trackSpecificMints: [],       // Array of mint addresses to always show
-  statsInterval: 30000,         // Stats display interval (ms)
-};
-```
-
-## Trade Data Structure
-
-Each `tradeCreated` event contains:
-
-```javascript
-{
-  "signature": "transaction_signature",
-  "sol_amount": 123456789,        // in lamports (use lib/token-math.js helpers for SOL conversions)
-  "token_amount": 999999999999,    // raw token amount
-  "is_buy": true,                  // true=buy, false=sell
-  "user": "wallet_address",
-  "timestamp": 1758066946,         // Unix timestamp
-  "mint": "token_mint_address",
-  "virtual_sol_reserves": 12345,   // bonding curve reserves
-  "virtual_token_reserves": 99999, // bonding curve reserves
-  "slot": 367308199,              // Solana slot number
-  "tx_index": 1,                  // transaction index in slot
-  "name": "Token Name",
-  "symbol": "SYMBOL"              // sometimes included
-}
-```
-
-## Log Files
-
-When logging is enabled, the monitor creates:
-- `logs/trades-YYYY-MM-DD.jsonl` - Daily trade logs
-- `logs/events.jsonl` - Other WebSocket events
-- `logs/summary-[timestamp].json` - Session summary on exit
-
-## Advanced CLI Options
-
-| Option | Description |
-|--------|-------------|
-| `--min-sol <amount>` | Minimum SOL amount to display (default: 0.1) |
-| `--token <mint>` | Track specific token by mint address |
-| `--user <address>` | Track specific user's trades |
-| `--buys-only` | Show only buy transactions |
-| `--sells-only` | Show only sell transactions |
-| `--large-trades` | Show only trades > 10 SOL |
-| `--raw` | Show raw JSON data |
-| `--stats` | Show statistics mode |
-| `--csv` | Output in CSV format |
-| `--help` | Show help message |
-
-## Notes
-
-- All SOL amounts are in lamports (1 SOL = 1,000,000,000 lamports)
-- The WebSocket auto-reconnects on disconnection
-- Press Ctrl+C for graceful shutdown with statistics summary
-- Trade volume can be very high (multiple trades per second)
-- Livestream APIs require standard browser headers; scripts in this repo set `origin`/`referer` automatically
-- `npm test` exercises the live pump.fun APIs—runs require network access and will consume short-lived LiveKit viewer tokens.
-
-## Browser Usage
-
-To see WebSocket data in browser:
-1. Open https://pump.fun/live
-2. Open Developer Tools (F12)
-3. Go to Network tab
-4. Filter by "WS" (WebSocket)
-5. Click on the socket.io connection
-6. View Messages tab for real-time data
+For deeper knobs (including legacy monitor flags), consult the inline CLI help or the docs in `docs/` if you truly need them.
 
 ## License
 
-Distributed under the [MIT License](LICENSE). Feel free to fork, extend, and build your own monitoring pipelines—credit is appreciated.
-
-
-## TODO / Ideas
-- Convert Next.js dashboard top section into a vertical leaderboard with infinity scroll or pagination.
-- Introduce filters (min viewers, search by mint/name) and compare charts side by side.
-- Show still streams (inactive) with dimmed style and optional include toggle.
-
-## Codex Cloud Setup
-
-This repository is ready for [OpenAI Codex Cloud environments](https://developers.openai.com/codex/cloud/environments/).
-
-- **Setup script** – `codex/setup.sh` installs the root dependencies and the
-  `dashboard/` Next.js packages. Point the Codex environment at this script so
-  cached containers always have the right toolchain installed.
-- **Agent instructions** – `AGENTS.md` documents the setup, build, and test
-  commands that Codex (or a human teammate) should run. Codex automatically
-  tries to honor any lint/test commands defined here.
-- **Environment variables** – define Supabase credentials (`SUPABASE_URL`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`) in the
-  Codex environment settings or secrets panel.
-- **Node version** – the project targets Node 20, which matches the default
-  `universal` Codex image. Update the environment setting if you bump the
-  version in `package.json`.
-- **Ports** – production uses port `3050`. When you run `npm run dev` in Codex
-  (for HMR), choose an alternate port (`npm run dev -- --port 3051`) to avoid
-  conflicts.
-
-## Recon Playground Scripts
-
-Older exploratory utilities (Socket.IO discovery, Puppeteer sniffers, experimental monitors) now live in `tools/`. They’re unsupported but kept around for manual poking.
-
-## Additional Docs
-
-- `docs/WEBSOCKET-ENDPOINTS.md` – most recently captured Pump.fun WebSocket and REST endpoints. Regenerate by running `npm run investigate` and updating the doc if APIs shift.
+Distributed under the [MIT License](LICENSE).
