@@ -25,9 +25,11 @@
     "docs:deploy": "bash tools/docs-deploy.sh",
     "migrate": "node cli/scripts/apply-migrations.mjs",
     "backfill:metadata": "node cli/scripts/backfill-stream-metadata.mjs",
-    "prisma:generate": "prisma generate",
-    "prisma:pull": "prisma db pull",
-    "postinstall": "prisma generate"
+    "prisma": "./scripts/prisma.sh",
+    "prisma:status": "./scripts/prisma.sh migrate status --schema prisma/schema.prisma",
+    "prisma:generate": "./scripts/prisma.sh generate",
+    "prisma:pull": "./scripts/prisma.sh db pull",
+    "postinstall": "./scripts/prisma.sh generate"
   },
   "keywords": [
     "pump.fun",
