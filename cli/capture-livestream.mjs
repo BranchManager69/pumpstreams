@@ -418,6 +418,7 @@ async function main() {
 
   const audioDeferred = createDeferred('audio track');
   const videoDeferred = createDeferred('video track');
+  const captureStarted = createDeferred('first media track');
   const captureController = new AbortController();
   const captureSignal = captureController.signal;
   let audioCapturePromise = null;
@@ -466,6 +467,13 @@ async function main() {
     if (publication) {
       activePublications.add(publication);
     }
+    if (!captureStarted.settled) {
+      captureStarted.resolve(track);
+    }
+    if (!startedAt) {
+      startedAt = new Date();
+    }
+    startViewerPolling();
     if (kind === TrackKind.KIND_AUDIO && !audioDeferred.settled && !audioCapturePromise) {
       audioCapturePromise = recordAudio(track, audioPath, { signal: captureSignal });
       audioDeferred.resolve(track);
@@ -495,12 +503,10 @@ async function main() {
   try {
     await room.connect(regionUrl, joinInfo.token, { autoSubscribe: true });
 
-    await Promise.all([
-      waitWithTimeout(audioDeferred.promise, waitMs, 'audio track'),
-      waitWithTimeout(videoDeferred.promise, waitMs, 'video track'),
-    ]);
-
-    startedAt = new Date();
+    await waitWithTimeout(captureStarted.promise, waitMs, 'first media track');
+    if (!startedAt) {
+      startedAt = new Date();
+    }
     startViewerPolling();
 
     const targetMs = finalDuration * 1000;
@@ -540,10 +546,25 @@ async function main() {
   const durationMsRaw = endedAt.getTime() - startedAt.getTime();
   const durationMs = durationMsRaw > 0 ? durationMsRaw : finalDuration * 1000;
 
-  const audioExists = await ensureFileExists(audioPath);
-  const videoExists = await ensureFileExists(videoPath);
-  if (!audioExists || !videoExists) {
-    console.error('Capture did not produce both audio and video files.');
+  const audioExpected = Boolean(audioCapturePromise);
+  const videoExpected = Boolean(videoCapturePromise);
+  const audioExists = audioExpected ? await ensureFileExists(audioPath) : false;
+  const videoExists = videoExpected ? await ensureFileExists(videoPath) : false;
+
+  if (!audioExpected) {
+    console.warn('No audio track detected; continuing without audio.');
+  } else if (!audioExists) {
+    console.warn('Audio track subscribed but produced no data; skipping audio output.');
+  }
+
+  if (!videoExpected) {
+    console.warn('No video track detected; continuing without video.');
+  } else if (!videoExists) {
+    console.warn('Video track subscribed but produced no data; skipping video output.');
+  }
+
+  if (!audioExists && !videoExists) {
+    console.error('Capture did not produce any media files.');
     await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
     process.exit(1);
   }
@@ -558,13 +579,19 @@ async function main() {
 
   const timestampSlug = slugForTimestamp(startedAt);
   const baseKey = `captures/${mintId}/${timestampSlug}`;
-  const audioKey = `${baseKey}/audio.webm`;
-  const videoKey = `${baseKey}/video.webm`;
+  let audioKey = null;
+  let videoKey = null;
 
   let uploadError = null;
   try {
-    await uploadObjectToS3({ key: audioKey, body: createReadStream(audioPath), contentType: 'video/webm' });
-    await uploadObjectToS3({ key: videoKey, body: createReadStream(videoPath), contentType: 'video/webm' });
+    if (audioExists) {
+      audioKey = `${baseKey}/audio.webm`;
+      await uploadObjectToS3({ key: audioKey, body: createReadStream(audioPath), contentType: 'video/webm' });
+    }
+    if (videoExists) {
+      videoKey = `${baseKey}/video.webm`;
+      await uploadObjectToS3({ key: videoKey, body: createReadStream(videoPath), contentType: 'video/webm' });
+    }
   } catch (error) {
     uploadError = error;
   }
@@ -576,6 +603,13 @@ async function main() {
     minViewers,
     segmentLength: segmentLengthSec,
   };
+
+  const capturedTracks = [];
+  const missingTracks = [];
+  if (audioExists) capturedTracks.push('audio'); else missingTracks.push('audio');
+  if (videoExists) capturedTracks.push('video'); else missingTracks.push('video');
+  const clipStatus = missingTracks.length === 0 ? 'ready' : 'partial';
+  const clipNotes = missingTracks.length === 0 ? null : `missing:${missingTracks.join(',')}`;
 
   if (!uploadError) {
     await persistLivestreamClip({
@@ -590,7 +624,8 @@ async function main() {
       params: paramsSummary,
       s3AudioKey: audioKey,
       s3VideoKey: videoKey,
-      status: 'ready',
+      status: clipStatus,
+      notes: clipNotes,
     });
   }
 
@@ -606,6 +641,8 @@ async function main() {
     s3AudioKey: audioKey,
     s3VideoKey: videoKey,
     params: paramsSummary,
+    tracksCaptured: capturedTracks,
+    missingTracks,
   };
 
   if (uploadError) {
@@ -632,8 +669,8 @@ async function main() {
     console.log(`  Mint: ${mintId}`);
     console.log(`  Duration: ${(durationMs / 1000).toFixed(1)}s`);
     console.log(`  Viewers (min/max): ${viewerMin ?? 'n/a'} / ${viewerMax ?? 'n/a'}`);
-    console.log(`  Audio: s3://${audioKey}`);
-    console.log(`  Video: s3://${videoKey}`);
+    console.log(`  Audio: ${audioKey ? `s3://${audioKey}` : 'not captured'}`);
+    console.log(`  Video: ${videoKey ? `s3://${videoKey}` : 'not captured'}`);
   }
 
   await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
