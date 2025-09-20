@@ -1,17 +1,13 @@
 import { getServiceClient } from './supabase';
 import type { DashboardPayload, DashboardTotals, DashboardEvent } from '../types/dashboard';
-import type { DashboardStream, SnapshotPoint, StreamMomentumMetrics, StreamMetadata } from './types';
+import type { DashboardStream, StreamMetadata, StreamSort } from './types';
 
 const TOP_LIMIT = Number(process.env.DASHBOARD_TOP_LIMIT ?? '100');
-const LOOKBACK_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
 const FETCH_LIMIT = Math.min(
   Number(process.env.DASHBOARD_FETCH_LIMIT ?? process.env.LIVE_POLLER_LIMIT ?? '500'),
   1000
 );
-const HISTORY_CHUNK_SIZE = Number(process.env.DASHBOARD_HISTORY_CHUNK_SIZE ?? '100');
-const HISTORY_MAX_POINTS = Number(process.env.DASHBOARD_HISTORY_MAX_POINTS ?? '180');
-const MINT_LIMIT = Math.min(TOP_LIMIT * 3, FETCH_LIMIT);
-const MOMENTUM_WINDOWS_MINUTES = [5, 15] as const;
+const DEFAULT_SORT: StreamSort = process.env.DASHBOARD_DEFAULT_SORT === 'viewers' ? 'viewers' : 'marketCap';
 const DEFAULT_POLLER_INTERVAL_MS = 30000;
 const rawPollerIntervalMs = Number(process.env.LIVE_POLLER_INTERVAL_MS ?? DEFAULT_POLLER_INTERVAL_MS);
 const POLLER_INTERVAL_MS = Number.isFinite(rawPollerIntervalMs) && rawPollerIntervalMs > 0 ? rawPollerIntervalMs : DEFAULT_POLLER_INTERVAL_MS;
@@ -21,8 +17,9 @@ const DISCONNECT_CYCLES = Number.isFinite(rawDisconnectCycles) && rawDisconnectC
 const LIVE_THRESHOLD_SECONDS = POLLER_INTERVAL_SECONDS;
 const DROP_THRESHOLD_SECONDS = Math.max(POLLER_INTERVAL_SECONDS * DISCONNECT_CYCLES, POLLER_INTERVAL_SECONDS + 1);
 const SPOTLIGHT_LIMIT = Number(process.env.DASHBOARD_SPOTLIGHT_LIMIT ?? '8');
-const DROP_VIEWER_DELTA = Number(process.env.DASHBOARD_DROP_VIEWER_DELTA ?? '100');
-const SURGE_VIEWER_DELTA = Number(process.env.DASHBOARD_SURGE_VIEWER_DELTA ?? '120');
+const WINDOW_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
+
+export const SORT_OPTIONS: StreamSort[] = ['marketCap', 'viewers'];
 
 interface LatestRow {
   mint_id: string;
@@ -35,79 +32,10 @@ interface LatestRow {
   livestream: Record<string, any> | null;
 }
 
-interface HistoryRow {
-  mint_id: string;
-  fetched_at: string;
-  num_participants: number | null;
-  market_cap: number | null;
-}
-
-function buildHistoryMap(rows: HistoryRow[], mintedOrder: string[]): Map<string, SnapshotPoint[]> {
-  const historyMap = new Map<string, SnapshotPoint[]>();
-  for (const mint of mintedOrder) {
-    historyMap.set(mint, []);
-  }
-
-  for (const row of rows) {
-    if (!historyMap.has(row.mint_id)) {
-      historyMap.set(row.mint_id, []);
-    }
-    historyMap.get(row.mint_id)!.push({
-      fetched_at: row.fetched_at,
-      num_participants: row.num_participants,
-      market_cap: row.market_cap,
-    });
-  }
-
-  for (const [, points] of historyMap) {
-    points.sort((a, b) => new Date(a.fetched_at).getTime() - new Date(b.fetched_at).getTime());
-  }
-
-  return historyMap;
-}
-
-function computeMomentum(history: SnapshotPoint[], windowMinutes: number): number | null {
-  if (!history.length) return null;
-  const windowMs = windowMinutes * 60 * 1000;
-  const nowMs = Date.now();
-  const windowStart = nowMs - windowMs;
-
-  const relevantPoints = history.filter((point) => {
-    const pointMs = new Date(point.fetched_at).getTime();
-    return Number.isFinite(pointMs) && pointMs >= windowStart;
-  });
-
-  if (relevantPoints.length < 2) return null;
-
-  const first = relevantPoints[0].num_participants;
-  const last = relevantPoints[relevantPoints.length - 1].num_participants;
-  if (first === null || first === undefined || last === null || last === undefined) return null;
-
-  return last - first;
-}
-
-function buildMomentumMetrics(history: SnapshotPoint[]): StreamMomentumMetrics {
-  const metrics = MOMENTUM_WINDOWS_MINUTES.map((minutes) => computeMomentum(history, minutes));
-  const [delta5, delta15] = metrics;
-  const windowMinutes = MOMENTUM_WINDOWS_MINUTES[0];
-  const velocity = delta5 !== null && windowMinutes > 0 ? delta5 / windowMinutes : null;
-
-  return {
-    delta5m: delta5,
-    delta15m: delta15,
-    velocityPerMin: velocity,
-  };
-}
-
-function calculatePeakViewers(history: SnapshotPoint[]): number | null {
-  let peak: number | null = null;
-  for (const point of history) {
-    if (point.num_participants === null || point.num_participants === undefined) continue;
-    if (peak === null || point.num_participants > peak) {
-      peak = point.num_participants;
-    }
-  }
-  return peak;
+function parseSort(value: string | null | undefined): StreamSort {
+  if (!value) return DEFAULT_SORT;
+  const normalised = value.toLowerCase();
+  return normalised === 'viewers' ? 'viewers' : 'marketCap';
 }
 
 function classifyStreamAge(ageSeconds: number | null): { status: DashboardStream['status']; countdownSeconds: number | null } | null {
@@ -150,22 +78,44 @@ function buildTotals(streams: DashboardStream[]): DashboardTotals {
   };
 }
 
-export async function fetchTopStreams(): Promise<DashboardPayload> {
-  const supabase = getServiceClient();
-  const lookbackIso = new Date(Date.now() - LOOKBACK_MINUTES * 60 * 1000).toISOString();
+function numericDesc(a: number | null | undefined, b: number | null | undefined): number {
+  const left = Number.isFinite(a) ? (a as number) : Number.NEGATIVE_INFINITY;
+  const right = Number.isFinite(b) ? (b as number) : Number.NEGATIVE_INFINITY;
+  if (right === left) return 0;
+  return right > left ? 1 : -1;
+}
 
-  const latestLimit = Math.max(TOP_LIMIT * 3, FETCH_LIMIT);
+function compareBySort(a: DashboardStream, b: DashboardStream, sort: StreamSort): number {
+  if (sort === 'viewers') {
+    const primary = numericDesc(a.metrics.viewers.current, b.metrics.viewers.current);
+    if (primary !== 0) return primary;
+    return numericDesc(a.metrics.marketCap.current, b.metrics.marketCap.current);
+  }
+
+  const primary = numericDesc(a.metrics.marketCap.current, b.metrics.marketCap.current);
+  if (primary !== 0) return primary;
+  return numericDesc(a.metrics.viewers.current, b.metrics.viewers.current);
+}
+
+function sortStreams(streams: DashboardStream[], sort: StreamSort): DashboardStream[] {
+  return [...streams].sort((a, b) => compareBySort(a, b, sort));
+}
+
+export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPayload> {
+  const sort = parseSort(sortRequest);
+  const supabase = getServiceClient();
+
   const { data: latestRows, error: latestError } = await supabase
     .from('livestream_latest')
     .select('mint_id, fetched_at, num_participants, market_cap, usd_market_cap, thumbnail, is_live, livestream')
     .order('num_participants', { ascending: false })
-    .limit(latestLimit);
+    .limit(Math.max(TOP_LIMIT, FETCH_LIMIT));
 
   if (latestError) {
     if (latestError.message.includes('Could not find the table')) {
       return {
         generatedAt: new Date().toISOString(),
-        windowMinutes: LOOKBACK_MINUTES,
+        windowMinutes: WINDOW_MINUTES,
         streams: [],
         spotlight: [],
         totals: {
@@ -178,31 +128,29 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
         events: [],
         latestSnapshotAt: null,
         oldestSnapshotAgeSeconds: null,
+        sort,
       };
     }
     throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
   }
 
-  const validRows = (latestRows ?? []).filter((row) => Boolean(row?.mint_id)) as LatestRow[];
-
-  const mintOrder: string[] = [];
-  const seen = new Set<string>();
-  for (const row of validRows) {
-    if (!seen.has(row.mint_id)) {
-      seen.add(row.mint_id);
-      mintOrder.push(row.mint_id);
+  const rows = ((latestRows ?? []).filter((row) => Boolean(row?.mint_id)) as LatestRow[]);
+  const uniqueRows = new Map<string, LatestRow>();
+  for (const row of rows) {
+    if (!uniqueRows.has(row.mint_id)) {
+      uniqueRows.set(row.mint_id, row);
     }
-    if (mintOrder.length >= MINT_LIMIT) {
-      break;
-    }
+    if (uniqueRows.size >= FETCH_LIMIT) break;
   }
 
+  const mintIds = Array.from(uniqueRows.keys()).slice(0, TOP_LIMIT);
+
   let metadataMap: Map<string, StreamMetadata> = new Map();
-  if (mintOrder.length) {
+  if (mintIds.length) {
     const { data: metadataRows, error: metadataError } = await supabase
       .from('stream_metadata')
       .select('*')
-      .in('mint_id', mintOrder);
+      .in('mint_id', mintIds);
     if (metadataError) {
       console.error('[supabase] Failed to fetch stream metadata:', metadataError.message);
     } else {
@@ -210,96 +158,21 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
     }
   }
 
-  const historyRows: HistoryRow[] = [];
-  for (let i = 0; i < mintOrder.length; i += HISTORY_CHUNK_SIZE) {
-    const chunk = mintOrder.slice(i, i + HISTORY_CHUNK_SIZE);
-    const { data, error } = await supabase
-      .from('livestream_snapshots')
-      .select('mint_id, fetched_at, num_participants, market_cap')
-      .in('mint_id', chunk)
-      .gte('fetched_at', lookbackIso)
-      .order('fetched_at', { ascending: true });
-
-    if (error) {
-      throw new Error(`Failed to fetch livestream histories (chunk ${i / HISTORY_CHUNK_SIZE + 1}): ${error.message}`);
-    }
-
-    historyRows.push(...((data ?? []) as HistoryRow[]));
-  }
-
-  const historyMap = buildHistoryMap(historyRows, mintOrder);
-
-  const latestByMint = new Map<string, LatestRow>();
-  for (const row of validRows) {
-    if (!latestByMint.has(row.mint_id)) {
-      latestByMint.set(row.mint_id, row);
-    }
-  }
-
   const nowMs = Date.now();
-
   const streams: DashboardStream[] = [];
 
-  for (const mintId of mintOrder) {
-    const latest = latestByMint.get(mintId);
+  for (const mintId of mintIds) {
+    const latest = uniqueRows.get(mintId);
+    if (!latest || !latest.fetched_at) continue;
+
     const metadata = metadataMap.get(mintId) ?? null;
-    if (!latest || !latest.fetched_at) {
-      continue;
-    }
-
-    const history = historyMap.get(mintId) ?? [];
-    const trimmedHistory = HISTORY_MAX_POINTS > 0 ? history.slice(-HISTORY_MAX_POINTS) : history;
-
-    const latestAt = latest.fetched_at;
-    const latestTimestamp = new Date(latestAt).getTime();
+    const simplified = latest.livestream ?? null;
+    const latestTimestamp = new Date(latest.fetched_at).getTime();
     const ageSeconds = Number.isFinite(latestTimestamp) ? Math.max(0, Math.floor((nowMs - latestTimestamp) / 1000)) : null;
     const classification = classifyStreamAge(ageSeconds);
-    if (!classification) {
-      continue;
-    }
+    if (!classification) continue;
 
     const { status, countdownSeconds } = classification;
-
-    const currentViewers = latest.num_participants ?? null;
-    const currentMarketCap = latest.market_cap ?? null;
-
-    const viewerMomentum = buildMomentumMetrics(trimmedHistory);
-    const marketCapMomentum = (() => {
-      if (!trimmedHistory.length) {
-        return { delta5m: null, delta15m: null, velocityPerMin: null };
-      }
-      const windowMs = MOMENTUM_WINDOWS_MINUTES[0] * 60 * 1000;
-      const now = Date.now();
-      const windowStart = now - windowMs;
-      const relevant = trimmedHistory.filter((point) => {
-        const pointMs = new Date(point.fetched_at).getTime();
-        return Number.isFinite(pointMs) && pointMs >= windowStart;
-      });
-      if (relevant.length < 2) {
-        return { delta5m: null, delta15m: null, velocityPerMin: null };
-      }
-      const delta5 = computeMomentum(trimmedHistory.map((point) => ({
-        fetched_at: point.fetched_at,
-        num_participants: point.market_cap,
-        market_cap: point.market_cap,
-      })), MOMENTUM_WINDOWS_MINUTES[0]);
-      const delta15 = computeMomentum(trimmedHistory.map((point) => ({
-        fetched_at: point.fetched_at,
-        num_participants: point.market_cap,
-        market_cap: point.market_cap,
-      })), MOMENTUM_WINDOWS_MINUTES[1]);
-      const velocityPerMin = delta5 !== null && MOMENTUM_WINDOWS_MINUTES[0] > 0 ? delta5 / MOMENTUM_WINDOWS_MINUTES[0] : null;
-      return {
-        delta5m: delta5,
-        delta15m: delta15,
-        velocityPerMin,
-      };
-    })();
-
-    const simplified = latest.livestream ?? null;
-    const momentumBoost = Math.max(viewerMomentum.delta5m ?? 0, 0);
-    const freshnessWeight = status === 'live' ? 1 : 0.04;
-    const score = ((currentViewers ?? 0) + momentumBoost) * freshnessWeight;
 
     streams.push({
       mintId,
@@ -311,100 +184,76 @@ export async function fetchTopStreams(): Promise<DashboardPayload> {
         (simplified?.thumbnail as string | undefined) ??
         null,
       status,
-      latestAt,
+      latestAt: latest.fetched_at,
       dropCountdownSeconds: countdownSeconds,
       metrics: {
         lastSnapshotAgeSeconds: ageSeconds,
         viewers: {
-          current: currentViewers,
-          peak: calculatePeakViewers(trimmedHistory),
-          momentum: viewerMomentum,
+          current: latest.num_participants ?? null,
         },
         marketCap: {
-          current: currentMarketCap,
-          momentum: marketCapMomentum,
+          current: latest.market_cap ?? null,
         },
       },
-      sparkline: trimmedHistory,
-      score,
       metadata,
     });
   }
 
-  const totals = buildTotals(streams);
+  const sortedStreams = sortStreams(streams, sort);
+  const totals = buildTotals(sortedStreams);
 
   let latestSnapshotAt: string | null = null;
   let oldestSnapshotAgeSeconds: number | null = null;
-  for (const stream of streams) {
+
+  for (const stream of sortedStreams) {
     if (stream.latestAt) {
       const ts = new Date(stream.latestAt).getTime();
-      if (Number.isFinite(ts)) {
-        if (!latestSnapshotAt || ts > new Date(latestSnapshotAt).getTime()) {
-          latestSnapshotAt = stream.latestAt;
-        }
+      if (Number.isFinite(ts) && (!latestSnapshotAt || ts > new Date(latestSnapshotAt).getTime())) {
+        latestSnapshotAt = stream.latestAt;
       }
     }
+
     const age = stream.metrics.lastSnapshotAgeSeconds;
     if (age !== null && age !== undefined) {
       oldestSnapshotAgeSeconds = oldestSnapshotAgeSeconds === null ? age : Math.max(oldestSnapshotAgeSeconds, age);
     }
   }
 
-  const spotlight = [...streams]
+  const spotlight = sortedStreams
     .filter((stream) => stream.status === 'live')
-    .sort((a, b) => b.score - a.score)
     .slice(0, SPOTLIGHT_LIMIT);
 
-  const events: DashboardEvent[] = [];
-  for (const stream of streams) {
-    const delta5 = stream.metrics.viewers.momentum.delta5m ?? 0;
-    if (stream.status === 'disconnecting') {
-      const remaining = Math.max(0, stream.dropCountdownSeconds ?? 0);
-      events.push({
-        type: 'drop',
-        mintId: stream.mintId,
-        message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} signal lost · removing in ${remaining}s`,
-        severity: 'warning',
-        timestamp: stream.latestAt,
-      });
-    } else if (stream.status === 'live' && delta5 >= SURGE_VIEWER_DELTA) {
-      events.push({
-        type: 'surge',
-        mintId: stream.mintId,
-        message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} up ${delta5.toLocaleString()} viewers in 5m`,
-        severity: 'info',
-        timestamp: stream.latestAt,
-      });
-    } else if (stream.status === 'live' && delta5 <= -DROP_VIEWER_DELTA) {
-      events.push({
-        type: 'drop',
-        mintId: stream.mintId,
-        message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} down ${Math.abs(delta5).toLocaleString()} viewers in 5m`,
-        severity: 'warning',
-        timestamp: stream.latestAt,
-      });
-    }
-  }
-
-  events.sort((a, b) => (b.timestamp ? new Date(b.timestamp).getTime() : 0) - (a.timestamp ? new Date(a.timestamp).getTime() : 0));
+  const events: DashboardEvent[] = sortedStreams
+    .filter((stream) => stream.status === 'disconnecting')
+    .map((stream) => ({
+      type: 'drop' as const,
+      mintId: stream.mintId,
+      message: `${stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)} signal lost`,
+      severity: 'warning' as const,
+      timestamp: stream.latestAt,
+    }))
+    .slice(0, 12);
 
   return {
     generatedAt: new Date().toISOString(),
-    windowMinutes: LOOKBACK_MINUTES,
-    streams,
+    windowMinutes: WINDOW_MINUTES,
+    streams: sortedStreams,
     spotlight,
     totals,
-    events: events.slice(0, 12),
+    events,
     latestSnapshotAt,
     oldestSnapshotAgeSeconds,
+    sort,
   };
 }
 
 export function getDashboardConfig() {
   return {
     topLimit: TOP_LIMIT,
-    lookbackMinutes: LOOKBACK_MINUTES,
+    windowMinutes: WINDOW_MINUTES,
     pollerIntervalSeconds: LIVE_THRESHOLD_SECONDS,
     dropThresholdSeconds: DROP_THRESHOLD_SECONDS,
+    availableSorts: SORT_OPTIONS,
+    defaultSort: DEFAULT_SORT,
   };
 }

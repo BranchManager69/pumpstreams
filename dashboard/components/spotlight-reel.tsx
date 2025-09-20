@@ -7,6 +7,14 @@ export type SpotlightReelProps = {
   streams: DashboardStream[];
 };
 
+function formatMarketCap(value: number | null): string {
+  if (value === null || value === undefined) return 'MC n/a';
+  const compact = new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: value >= 1000 ? 0 : 2,
+  }).format(value);
+  return `MC ${compact} SOL`;
+}
+
 export function SpotlightReel({ streams }: SpotlightReelProps) {
   if (!streams.length) {
     return null;
@@ -26,9 +34,7 @@ export function SpotlightReel({ streams }: SpotlightReelProps) {
               <div className="title">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
               <div className="stats">
                 <span>{(stream.metrics.viewers.current ?? 0).toLocaleString()} viewers</span>
-                <span className={deltaClass(stream.metrics.viewers.momentum.delta5m)}>
-                  {formatDelta(stream.metrics.viewers.momentum.delta5m)} / 5m
-                </span>
+                <span className="muted">{formatMarketCap(stream.metrics.marketCap.current)}</span>
               </div>
             </div>
           </div>
@@ -41,17 +47,4 @@ export function SpotlightReel({ streams }: SpotlightReelProps) {
       ))}
     </section>
   );
-}
-
-function deltaClass(delta: number | null): string {
-  if (delta === null) return 'muted';
-  if (delta > 0) return 'positive';
-  if (delta < 0) return 'negative';
-  return 'muted';
-}
-
-function formatDelta(delta: number | null): string {
-  if (delta === null) return '—';
-  if (delta === 0) return '0';
-  return `${delta > 0 ? '+' : ''}${delta.toLocaleString()}`;
 }

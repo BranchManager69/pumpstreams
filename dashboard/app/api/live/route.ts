@@ -4,9 +4,11 @@ import type { DashboardPayload } from '../../../types/dashboard';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await fetchTopStreams();
+    const { searchParams } = new URL(request.url);
+    const sort = searchParams.get('sort') ?? undefined;
+    const data = await fetchTopStreams(sort ?? undefined);
     const config = getDashboardConfig();
     const payload: DashboardPayload & { config: ReturnType<typeof getDashboardConfig> } = {
       ...data,

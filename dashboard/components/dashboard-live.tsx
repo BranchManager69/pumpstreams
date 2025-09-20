@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { DashboardPayload } from '../types/dashboard';
-import type { DashboardStream } from '../lib/types';
+import type { DashboardStream, StreamSort } from '../lib/types';
 import { LiveLeaderboard } from './stream-leaderboard';
 import { SpotlightReel } from './spotlight-reel';
 import { formatMetric, formatUsdCompact } from './metric-formatters';
@@ -20,7 +20,11 @@ type FetchState = 'idle' | 'loading' | 'error';
 type ApiResponse = DashboardPayload & {
   config: {
     topLimit: number;
-    lookbackMinutes: number;
+    windowMinutes: number;
+    pollerIntervalSeconds: number;
+    dropThresholdSeconds: number;
+    availableSorts: StreamSort[];
+    defaultSort: StreamSort;
   };
 };
 
@@ -156,15 +160,13 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   const filteredStreams = useMemo(() => {
     const query = filters.search.trim().toLowerCase();
-    return payload.streams
-      .filter((stream) => {
-        if (!query) return true;
-        const name = stream.name?.toLowerCase() ?? '';
-        const symbol = stream.symbol?.toLowerCase() ?? '';
-        const mint = stream.mintId.toLowerCase();
-        return name.includes(query) || symbol.includes(query) || mint.includes(query);
-      })
-      .sort((a, b) => b.score - a.score);
+    return payload.streams.filter((stream) => {
+      if (!query) return true;
+      const name = stream.name?.toLowerCase() ?? '';
+      const symbol = stream.symbol?.toLowerCase() ?? '';
+      const mint = stream.mintId.toLowerCase();
+      return name.includes(query) || symbol.includes(query) || mint.includes(query);
+    });
   }, [payload.streams, filters.search]);
 
   const spotlightStreams = payload.spotlight;
@@ -182,6 +184,8 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   const viewersCompact = formatMetric(payload.totals.totalLiveViewers);
   const marketCapUsdCompact = formatUsdCompact(totalMarketCapUsd);
+
+  const sortLabel = payload.sort === 'viewers' ? 'Viewers' : 'Market cap';
 
   const debugSections = useMemo(() => {
     return [
@@ -212,6 +216,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         title: 'Filters',
         entries: [
           { label: 'Search', value: filters.search || '(none)' },
+          { label: 'Sort order', value: payload.sort },
         ],
       },
     ];
@@ -227,6 +232,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
     payload.totals.liveStreams,
     payload.totals.totalLiveMarketCap,
     payload.totals.totalLiveViewers,
+    payload.sort,
     refreshCount,
     totalMarketCapUsd,
   ]);
@@ -259,6 +265,10 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
           <span className="summary-chip" title="Aggregate market cap (USD)">
             <span className="chip-label">$ Cap</span>
             <strong>{marketCapUsdCompact}</strong>
+          </span>
+          <span className="summary-chip" title="Current sort order">
+            <span className="chip-label">Sort</span>
+            <strong>{sortLabel}</strong>
           </span>
         </div>
         <div className="actions">

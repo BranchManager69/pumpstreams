@@ -27,6 +27,7 @@ function fallbackPayload(): DashboardPayload {
     supabaseOffline: true,
     latestSnapshotAt: null,
     oldestSnapshotAgeSeconds: null,
+    sort: 'marketCap',
   };
 }
 

@@ -1,4 +1,4 @@
-import type { DashboardStream } from '../lib/types';
+import type { DashboardStream, StreamSort } from '../lib/types';
 
 export type DashboardTotals = {
   totalStreams: number;
@@ -26,4 +26,5 @@ export type DashboardPayload = {
   supabaseOffline?: boolean;
   latestSnapshotAt: string | null;
   oldestSnapshotAgeSeconds: number | null;
+  sort: StreamSort;
 };
