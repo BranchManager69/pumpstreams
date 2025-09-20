@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment } from 'react';
+import Link from 'next/link';
 import type { DashboardStream } from '../lib/types';
 import { StreamCard } from './stream-card';
 import { useSolPrice } from './sol-price-context';
@@ -48,12 +49,15 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
             <tr key={stream.mintId} className={stream.status === 'disconnecting' ? 'status-disconnecting' : ''}>
               <td className="numeric-cell">{rankCursor}</td>
               <td className="cell-stream" title={`${symbolLabel} · Last update ${ageLabel}`}>
-                <div className={thumbClass} style={thumbStyle}>
-                  {!stream.thumbnail && <span className="thumb-initial">{fallbackLabel}</span>}
-                </div>
-                <div className="stream-meta">
-                  <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
-                </div>
+                <Link href={`/tokens/${stream.mintId}`} className="stream-link" prefetch={false}>
+                  <div className={thumbClass} style={thumbStyle}>
+                    {!stream.thumbnail && <span className="thumb-initial">{fallbackLabel}</span>}
+                  </div>
+                  <div className="stream-meta">
+                    <div className="name">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
+                    <div className="symbol">{stream.symbol ?? stream.mintId.slice(0, 8)}</div>
+                  </div>
+                </Link>
               </td>
               <td className="align-right viewers-cell numeric-cell">{formatViewerCount(stream.metrics.viewers.current)}</td>
               <td className="align-right numeric-cell">

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { DashboardStream } from '../lib/types';
 import { useSolPrice } from './sol-price-context';
 import { formatAge, formatCountdown, formatMarketUsd, formatViewerCount } from './metric-formatters';
@@ -17,7 +18,7 @@ export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdP
   const priceUsd = priceUsdProp ?? priceUsdContext;
 
   return (
-    <article className={`mobile-card mobile-${stream.status}`}>
+    <Link href={`/tokens/${stream.mintId}`} className={`mobile-card mobile-${stream.status}`} prefetch={false}>
       <header>
         <div className="rank">#{rank}</div>
         <div
@@ -69,6 +70,6 @@ export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdP
       <footer>
         <span className="mint">{stream.mintId.slice(0, 4)}…{stream.mintId.slice(-4)}</span>
       </footer>
-    </article>
+    </Link>
   );
 }
