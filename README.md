@@ -167,12 +167,11 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `LIVE_POLLER_INTERVAL_MS` | `30000` | Polling cadence for `/live` roster |
 | `DASHBOARD_FETCH_LIMIT` | `500` | Latest snapshots pulled into the dashboard buffer |
 | `DASHBOARD_TOP_LIMIT` | `100` | Active streams rendered above the fold |
-| `DASHBOARD_LOOKBACK_MINUTES` | `180` | History range rendered in sparklines |
-| `DASHBOARD_STALE_THRESHOLD_MINUTES` | `10` | Minutes without updates before a stream is marked inactive |
-| `DASHBOARD_HISTORY_CHUNK_SIZE` | `100` | Batch size when fetching historical snapshots per Supabase request |
-| `NEXT_PUBLIC_SPARKLINE_GAP_MINUTES` | `3` | Break sparkline lines when gaps exceed this many minutes |
+| `DASHBOARD_LOOKBACK_MINUTES` | `180` | Metadata hint shown in the dashboard payload |
+| `DASHBOARD_DISCONNECT_CYCLES` | `2` | Grace intervals (poll cycles) before marking a stream as dropped |
+| `DASHBOARD_SPOTLIGHT_LIMIT` | `8` | Live streams highlighted in the hero reel |
+| `DASHBOARD_DEFAULT_SORT` | `marketCap` | Primary ordering (`marketCap` or `viewers`) returned by `/api/live` |
 | `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
-| `DASHBOARD_HISTORY_MAX_POINTS` | `120` | Maximum number of points kept per sparkline history |
 
 For deeper knobs (including legacy monitor flags), consult the inline CLI help or the docs in `docs/` if you truly need them.
 
