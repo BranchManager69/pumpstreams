@@ -12,7 +12,7 @@ The developer track explains how the codebase is structured, how we work locally
 
 ## Local Development Basics
 
-- Copy `.env.example` to `.env` and fill in Supabase credentials
+- Copy `.env.example` to `.env.remote` and fill in Supabase credentials
 - Use `npm run monitor` to stream live websocket data
 - Run `npm test` before pushing to catch regressions
 

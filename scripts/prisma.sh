@@ -16,16 +16,16 @@ load_env_file() {
   return 1
 }
 
-loaded=0
-if load_env_file "${REPO_ROOT}/.env.remote"; then
-  loaded=1
-fi
-if load_env_file "${REPO_ROOT}/.env"; then
-  loaded=1
+env_hint="${PUMPSTREAMS_ENV_FILE:-.env.remote}"
+if [[ "${env_hint}" != /* ]]; then
+  env_path="${REPO_ROOT}/${env_hint}"
+else
+  env_path="${env_hint}"
 fi
 
-if [[ "$loaded" -eq 0 ]]; then
-  echo "[prisma.sh] No .env or .env.remote found" >&2
+if ! load_env_file "${env_path}"; then
+  echo "[prisma.sh] Failed to load environment file at ${env_path}" >&2
+  echo "Set PUMPSTREAMS_ENV_FILE to the desired env file or ensure .env.remote exists." >&2
   exit 1
 fi
 

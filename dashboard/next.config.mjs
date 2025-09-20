@@ -6,7 +6,7 @@ import { config as loadEnv } from 'dotenv';
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
 const repoRoot = path.resolve(thisDir, '..');
-const envHint = process.env.PUMPSTREAMS_ENV_FILE;
+const envHint = process.env.PUMPSTREAMS_ENV_FILE ?? '.env.remote';
 
 if (envHint) {
   const hintedPath = path.join(repoRoot, envHint);
@@ -20,7 +20,6 @@ const candidates = [
   `.env.${mode}.local`,
   '.env.local',
   `.env.${mode}`,
-  '.env',
 ];
 
 for (const filename of candidates) {
