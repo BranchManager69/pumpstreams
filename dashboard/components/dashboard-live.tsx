@@ -5,6 +5,7 @@ import type { DashboardPayload } from '../types/dashboard';
 import type { DashboardStream, StreamSort } from '../lib/types';
 import { LiveLeaderboard } from './stream-leaderboard';
 import { SpotlightReel } from './spotlight-reel';
+import { StreamScatter } from './stream-scatter';
 import { formatMetric, formatUsdCompact } from './metric-formatters';
 import { DebugConsole } from './debug-console';
 import { useSolPrice } from './sol-price-context';
@@ -285,6 +286,8 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
       </header>
 
       <SpotlightReel streams={spotlightStreams} />
+
+      <StreamScatter streams={filteredStreams} priceUsd={priceUsd} />
 
       {fetchState === 'error' && errorMessage && (
         <div className="alert error" role="status">

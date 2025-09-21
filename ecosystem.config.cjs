@@ -10,7 +10,7 @@ module.exports = {
       instances: 1,
       env: {
         LIVE_POLLER_INTERVAL_MS: process.env.LIVE_POLLER_INTERVAL_MS || '30000',
-        LIVE_POLLER_LIMIT: process.env.LIVE_POLLER_LIMIT || '500',
+        LIVE_POLLER_LIMIT: process.env.LIVE_POLLER_LIMIT || '1000',
         SUPABASE_SNAPSHOT_BATCH_SIZE: process.env.SUPABASE_SNAPSHOT_BATCH_SIZE || '100',
         SUPABASE_LATEST_BATCH_SIZE: process.env.SUPABASE_LATEST_BATCH_SIZE || '100',
         SUPABASE_METADATA_BATCH_SIZE: process.env.SUPABASE_METADATA_BATCH_SIZE || '100',

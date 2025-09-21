@@ -2,7 +2,7 @@
 import '../lib/env.js';
 import { parseArgs } from 'util';
 import { getCurrentlyLive } from '../lib/livestream-api.js';
-import { persistLiveRoster } from '../lib/supabase-storage.js';
+import { persistLiveRoster, persistPlatformMinuteMetrics } from '../lib/supabase-storage.js';
 import { buildJsonFileName, resolveOutputTarget, writeJsonFile } from '../lib/io-utils.js';
 import { optionalEnv } from '../lib/env.js';
 
@@ -22,9 +22,9 @@ if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
   throw new Error(`Invalid poller interval: ${intervalMs}`);
 }
 
-const limit = Number(values.limit ?? optionalEnv('LIVE_POLLER_LIMIT', '500'));
-if (!Number.isFinite(limit) || limit <= 0) {
-  throw new Error(`Invalid poller limit: ${limit}`);
+const pageSize = Number(values.limit ?? optionalEnv('LIVE_POLLER_LIMIT', '1000'));
+if (!Number.isFinite(pageSize) || pageSize <= 0) {
+  throw new Error(`Invalid poller limit: ${pageSize}`);
 }
 
 const iterations = values.once ? 1 : (values.iterations ? Number(values.iterations) : null);
@@ -53,6 +53,7 @@ async function persistSnapshot(data, fetchedAt) {
   try {
     await persistLiveRoster(data, fetchedAt);
     console.log(`[${fetchedAt}] Persisted ${data.length} streams to Supabase.`);
+    await persistPlatformMinuteMetrics({ fetchedAt, entries: data });
   } catch (error) {
     console.error(`[${fetchedAt}] Failed to persist roster:`, error.message);
   }
@@ -66,21 +67,44 @@ async function persistSnapshot(data, fetchedAt) {
       timestamp: fetchedAt,
     });
     const target = await resolveOutputTarget(outputPath, fileName);
-    await writeJsonFile(target, { fetchedAt, limit, streams: data });
+    await writeJsonFile(target, { fetchedAt, pageSize, streams: data });
     console.log(`[${fetchedAt}] Snapshot written to ${target}`);
   } catch (error) {
     console.error(`[${fetchedAt}] Failed to write snapshot:`, error.message);
   }
 }
 
+async function fetchFullRoster(pageLimit) {
+  const all = [];
+  let offset = 0;
+
+  while (true) {
+    const batch = await getCurrentlyLive({ offset, limit: pageLimit, includeNsfw: true });
+    const count = Array.isArray(batch) ? batch.length : 0;
+
+    if (!count) {
+      break;
+    }
+
+    all.push(...batch);
+    if (count < pageLimit) {
+      break;
+    }
+
+    offset += pageLimit;
+  }
+
+  return all;
+}
+
 async function main() {
   let iteration = 0;
-  console.log(`Starting live poller (interval ${intervalMs}ms, limit ${limit})`);
+  console.log(`Starting live poller (interval ${intervalMs}ms, pageSize ${pageSize})`);
   while (!shouldStop && (iterations === null || iteration < iterations)) {
     const startedAt = Date.now();
     const fetchedAt = new Date().toISOString();
     try {
-      const data = await getCurrentlyLive({ limit });
+      const data = await fetchFullRoster(pageSize);
       await persistSnapshot(data, fetchedAt);
     } catch (error) {
       console.error(`[${fetchedAt}] Poll failed:`, error.message);

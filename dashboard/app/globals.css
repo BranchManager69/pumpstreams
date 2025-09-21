@@ -895,6 +895,152 @@ header p {
   word-break: break-word;
 }
 
+.stream-scatter {
+  position: relative;
+  margin: clamp(1.1rem, 3vw, 2.2rem) 0;
+  padding: clamp(1.2rem, 3vw, 1.8rem) clamp(1.4rem, 3.5vw, 2.2rem)
+    clamp(2.6rem, 4vw, 3.4rem) clamp(1.6rem, 3.5vw, 2.4rem);
+  border-radius: 22px;
+  border: 1px solid rgba(76, 203, 255, 0.18);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(82, 255, 209, 0.14), transparent 60%),
+    radial-gradient(circle at 82% 80%, rgba(84, 123, 255, 0.1), transparent 58%),
+    rgba(8, 14, 24, 0.9);
+  box-shadow: 0 28px 54px rgba(6, 12, 20, 0.45);
+}
+
+.stream-scatter__body {
+  position: relative;
+  width: 100%;
+  height: clamp(320px, 50vh, 480px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(5, 10, 20, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.stream-scatter__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(90, 255, 212, 0.12), rgba(255, 116, 116, 0));
+  background-size: calc(100% / 3) calc(100% / 3), calc(100% / 3) calc(100% / 3), 100% 100%;
+  background-position: top left, top left, center;
+}
+
+.stream-scatter__points {
+  position: absolute;
+  inset: 0;
+}
+
+.scatter-point {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(120, 255, 240, 0.3);
+  box-shadow: 0 12px 28px rgba(4, 10, 22, 0.45);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: #f4faff;
+  text-transform: uppercase;
+  pointer-events: auto;
+  transition: transform 0.9s ease, width 0.6s ease, height 0.6s ease, box-shadow 0.3s ease, border 0.3s ease;
+}
+
+.scatter-point span {
+  mix-blend-mode: screen;
+}
+
+.scatter-point:hover,
+.scatter-point:focus-visible {
+  z-index: 4;
+  box-shadow: 0 22px 44px rgba(32, 206, 255, 0.45);
+  border-color: rgba(146, 255, 224, 0.7);
+}
+
+.scatter-point.status-disc {
+  border-color: rgba(255, 199, 107, 0.55);
+  box-shadow: 0 18px 36px rgba(255, 185, 90, 0.28);
+}
+
+.stream-scatter__axis {
+  position: absolute;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(215, 236, 245, 0.82);
+  pointer-events: none;
+}
+
+.stream-scatter__axis--x {
+  bottom: clamp(0.55rem, 2vw, 1rem);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.stream-scatter__axis--y {
+  top: 50%;
+  left: clamp(0.55rem, 1.8vw, 1.2rem);
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  display: inline-flex;
+  gap: 0.35em;
+}
+
+.stream-scatter__axis--y span {
+  display: block;
+}
+
+.stream-scatter__tooltip {
+  position: absolute;
+  transform: translate(12px, -12px);
+  padding: 0.55rem 0.75rem;
+  background: rgba(6, 10, 18, 0.94);
+  border: 1px solid rgba(92, 238, 255, 0.38);
+  border-radius: 10px;
+  min-width: 190px;
+  box-shadow: 0 20px 40px rgba(3, 10, 20, 0.55);
+  pointer-events: none;
+  font-size: 0.78rem;
+  color: rgba(224, 252, 255, 0.95);
+}
+
+.stream-scatter__tooltip .tooltip-name {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.stream-scatter__tooltip .tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  opacity: 0.86;
+}
+
+.stream-scatter__tooltip .tooltip-row + .tooltip-row {
+  margin-top: 0.22rem;
+}
+
+.stream-scatter__empty {
+  margin: clamp(1.2rem, 4vw, 2.2rem) 0;
+  padding: 1.3rem 1.6rem;
+  border-radius: 18px;
+  border: 1px dashed rgba(79, 255, 209, 0.3);
+  background: rgba(10, 16, 28, 0.65);
+  text-align: center;
+  color: rgba(214, 236, 245, 0.88);
+}
+
 .token-detail {
   display: flex;
   flex-direction: column;
@@ -1168,6 +1314,14 @@ header p {
   .token-actions {
     justify-content: flex-start;
   }
+
+  .stream-scatter {
+    padding: 1.2rem 1.4rem 2.4rem 1.5rem;
+  }
+
+  .stream-scatter__body {
+    height: clamp(260px, 48vh, 360px);
+  }
 }
 
 @media (max-width: 820px) {
@@ -1193,5 +1347,22 @@ header p {
 
   .command-bar {
     top: 7rem;
+  }
+
+  .stream-scatter {
+    padding: 1rem 1.1rem 2.1rem 1.2rem;
+  }
+
+  .stream-scatter__axis--x {
+    bottom: 0.6rem;
+  }
+
+  .stream-scatter__axis--y {
+    left: 0.7rem;
+  }
+
+  .stream-scatter__tooltip {
+    transform: translate(8px, -8px);
+    min-width: 160px;
   }
 }

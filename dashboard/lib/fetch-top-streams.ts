@@ -4,7 +4,7 @@ import type { DashboardStream, StreamMetadata, StreamSort } from './types';
 
 const TOP_LIMIT = Number(process.env.DASHBOARD_TOP_LIMIT ?? '100');
 const FETCH_LIMIT = Math.min(
-  Number(process.env.DASHBOARD_FETCH_LIMIT ?? process.env.LIVE_POLLER_LIMIT ?? '500'),
+  Number(process.env.DASHBOARD_FETCH_LIMIT ?? process.env.LIVE_POLLER_LIMIT ?? '1000'),
   1000
 );
 const DEFAULT_SORT: StreamSort = process.env.DASHBOARD_DEFAULT_SORT === 'viewers' ? 'viewers' : 'marketCap';
@@ -12,10 +12,8 @@ const DEFAULT_POLLER_INTERVAL_MS = 30000;
 const rawPollerIntervalMs = Number(process.env.LIVE_POLLER_INTERVAL_MS ?? DEFAULT_POLLER_INTERVAL_MS);
 const POLLER_INTERVAL_MS = Number.isFinite(rawPollerIntervalMs) && rawPollerIntervalMs > 0 ? rawPollerIntervalMs : DEFAULT_POLLER_INTERVAL_MS;
 const POLLER_INTERVAL_SECONDS = Math.max(1, Math.round(POLLER_INTERVAL_MS / 1000));
-const rawDisconnectCycles = Number(process.env.DASHBOARD_DISCONNECT_CYCLES ?? '2');
-const DISCONNECT_CYCLES = Number.isFinite(rawDisconnectCycles) && rawDisconnectCycles >= 1 ? Math.floor(rawDisconnectCycles) : 2;
 const LIVE_THRESHOLD_SECONDS = POLLER_INTERVAL_SECONDS;
-const DROP_THRESHOLD_SECONDS = Math.max(POLLER_INTERVAL_SECONDS * DISCONNECT_CYCLES, POLLER_INTERVAL_SECONDS + 1);
+const DROP_THRESHOLD_SECONDS = Math.max(LIVE_THRESHOLD_SECONDS * 2, LIVE_THRESHOLD_SECONDS + 1);
 const SPOTLIGHT_LIMIT = Number(process.env.DASHBOARD_SPOTLIGHT_LIMIT ?? '8');
 const WINDOW_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
 
@@ -104,10 +102,13 @@ function sortStreams(streams: DashboardStream[], sort: StreamSort): DashboardStr
 export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPayload> {
   const sort = parseSort(sortRequest);
   const supabase = getServiceClient();
+  const nowMs = Date.now();
+  const freshCutoffIso = new Date(nowMs - DROP_THRESHOLD_SECONDS * 1000).toISOString();
 
   const { data: latestRows, error: latestError } = await supabase
     .from('livestream_latest')
     .select('mint_id, fetched_at, num_participants, market_cap, usd_market_cap, thumbnail, is_live, livestream')
+    .gte('fetched_at', freshCutoffIso)
     .order('num_participants', { ascending: false })
     .limit(Math.max(TOP_LIMIT, FETCH_LIMIT));
 
@@ -143,7 +144,8 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
     if (uniqueRows.size >= FETCH_LIMIT) break;
   }
 
-  const mintIds = Array.from(uniqueRows.keys()).slice(0, TOP_LIMIT);
+  const latestEntries = Array.from(uniqueRows.values());
+  const mintIds = latestEntries.map((row) => row.mint_id);
 
   let metadataMap: Map<string, StreamMetadata> = new Map();
   if (mintIds.length) {
@@ -158,12 +160,11 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
     }
   }
 
-  const nowMs = Date.now();
   const streams: DashboardStream[] = [];
 
-  for (const mintId of mintIds) {
-    const latest = uniqueRows.get(mintId);
-    if (!latest || !latest.fetched_at) continue;
+  for (const latest of latestEntries) {
+    const mintId = latest.mint_id;
+    if (!mintId || !latest.fetched_at) continue;
 
     const metadata = metadataMap.get(mintId) ?? null;
     const simplified = latest.livestream ?? null;
@@ -200,12 +201,13 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
   }
 
   const sortedStreams = sortStreams(streams, sort);
-  const totals = buildTotals(sortedStreams);
+  const limitedStreams = sortedStreams.slice(0, TOP_LIMIT);
+  const totals = buildTotals(limitedStreams);
 
   let latestSnapshotAt: string | null = null;
   let oldestSnapshotAgeSeconds: number | null = null;
 
-  for (const stream of sortedStreams) {
+  for (const stream of limitedStreams) {
     if (stream.latestAt) {
       const ts = new Date(stream.latestAt).getTime();
       if (Number.isFinite(ts) && (!latestSnapshotAt || ts > new Date(latestSnapshotAt).getTime())) {
@@ -219,11 +221,11 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
     }
   }
 
-  const spotlight = sortedStreams
+  const spotlight = limitedStreams
     .filter((stream) => stream.status === 'live')
     .slice(0, SPOTLIGHT_LIMIT);
 
-  const events: DashboardEvent[] = sortedStreams
+  const events: DashboardEvent[] = limitedStreams
     .filter((stream) => stream.status === 'disconnecting')
     .map((stream) => ({
       type: 'drop' as const,
@@ -237,7 +239,7 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
   return {
     generatedAt: new Date().toISOString(),
     windowMinutes: WINDOW_MINUTES,
-    streams: sortedStreams,
+    streams: limitedStreams,
     spotlight,
     totals,
     events,

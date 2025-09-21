@@ -163,12 +163,12 @@ Environment variables let you point the tooling at alternate hosts or tweak beha
 | `PUMPSTREAMS_LIVEKIT_EDGE` | `https://pump-prod-tg2x8veh.livekit.cloud` | Base URL queried for LiveKit regions |
 | `PUMPSTREAMS_ORIGIN` | `https://pump.fun` | Spoofed `Origin` header for REST requests |
 | `PUMPSTREAMS_REFERER` | `https://pump.fun/live` | Spoofed `Referer` header for REST requests |
-| `LIVE_POLLER_LIMIT` | `500` | Streams sampled each poller iteration (override PM2 default) |
+| `LIVE_POLLER_LIMIT` | `1000` | Page size for live roster pagination (poller walks all pages, includes NSFW) |
 | `LIVE_POLLER_INTERVAL_MS` | `30000` | Polling cadence for `/live` roster |
-| `DASHBOARD_FETCH_LIMIT` | `500` | Latest snapshots pulled into the dashboard buffer |
+| `DASHBOARD_FETCH_LIMIT` | `1000` | Latest snapshots pulled into the dashboard buffer |
 | `DASHBOARD_TOP_LIMIT` | `100` | Active streams rendered above the fold |
 | `DASHBOARD_LOOKBACK_MINUTES` | `180` | Metadata hint shown in the dashboard payload |
-| `DASHBOARD_DISCONNECT_CYCLES` | `2` | Grace intervals (poll cycles) before marking a stream as dropped |
+| `DASHBOARD_DISCONNECT_CYCLES` | *(unused)* | Former grace-cycle override (drop window now auto=2× poll interval) |
 | `DASHBOARD_SPOTLIGHT_LIMIT` | `8` | Live streams highlighted in the hero reel |
 | `DASHBOARD_DEFAULT_SORT` | `marketCap` | Primary ordering (`marketCap` or `viewers`) returned by `/api/live` |
 | `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
