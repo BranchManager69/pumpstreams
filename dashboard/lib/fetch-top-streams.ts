@@ -157,7 +157,8 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
       const entries = Array.isArray(localTop.entries) ? localTop.entries : [];
       const streams: DashboardStream[] = [];
       for (const item of entries) {
-        const mcap = toNumberOrNull(item?.usd_market_cap) ?? toNumberOrNull(item?.market_cap);
+        const solCap = toNumberOrNull(item?.market_cap);
+        const usdCap = toNumberOrNull(item?.usd_market_cap);
         const classification = classifyStreamAge(ageSeconds);
         if (!classification) continue;
         const { status, countdownSeconds } = classification;
@@ -172,7 +173,11 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
           metrics: {
             lastSnapshotAgeSeconds: ageSeconds,
             viewers: { current: toNumberOrNull(item?.num_participants) },
-            marketCap: { current: toNumberOrNull(item?.market_cap), ...(mcap !== null ? { usd: mcap } : {}) } as any,
+            marketCap: {
+              current: usdCap ?? solCap ?? null,
+              usd: usdCap,
+              sol: solCap,
+            },
           },
           metadata: null,
         });
