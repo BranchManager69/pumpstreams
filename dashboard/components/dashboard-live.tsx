@@ -9,8 +9,6 @@ import { StreamScatter } from './stream-scatter';
 import { formatMetric, formatUsdCompact } from './metric-formatters';
 import { DebugConsole } from './debug-console';
 
-const REFRESH_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS ?? '20000');
-
 export type DashboardLiveProps = {
   initialPayload: DashboardPayload;
 };
@@ -46,32 +44,33 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
   const [filters, setFilters] = useState<FiltersState>(createInitialFilters);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showDebug, setShowDebug] = useState(false);
+  const [refreshMs, setRefreshMs] = useState<number>(30000);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     async function refresh() {
       try {
         setFetchState('loading');
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), Math.max(REFRESH_INTERVAL_MS - 2000, 5000));
+        const timeout = setTimeout(() => controller.abort(), Math.max(refreshMs - 2000, 5000));
         const res = await fetch('/api/live', {
           cache: 'no-store',
           signal: controller.signal,
-          headers: {
-            Accept: 'application/json',
-          },
+          headers: { Accept: 'application/json' },
         });
         clearTimeout(timeout);
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const incoming = (await res.json()) as ApiResponse;
         if (cancelled) return;
 
-        const { config: _config, ...payloadData } = incoming;
+        const { config: cfg, ...payloadData } = incoming;
+        if (cfg?.pollerIntervalSeconds && Number.isFinite(cfg.pollerIntervalSeconds)) {
+          setRefreshMs(Math.max(5000, Math.floor(cfg.pollerIntervalSeconds * 1000)));
+        }
         setPayload({ ...payloadData, supabaseOffline: false });
         setFetchState('idle');
         setErrorMessage(null);
@@ -81,17 +80,19 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
         setFetchState('error');
         setErrorMessage(error instanceof Error ? error.message : 'Unknown error');
         setPayload((prev) => ({ ...prev, supabaseOffline: true }));
+      } finally {
+        if (!cancelled) {
+          timer = setTimeout(refresh, Math.max(refreshMs, 5000));
+        }
       }
     }
 
-    const interval = setInterval(refresh, Math.max(REFRESH_INTERVAL_MS, 5000));
     refresh();
-
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [refreshMs]);
 
   useEffect(() => {
     const interval = setInterval(() => {

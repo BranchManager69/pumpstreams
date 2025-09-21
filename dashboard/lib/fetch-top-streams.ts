@@ -1,4 +1,7 @@
 import { getServiceClient } from './supabase';
+import { fetchFreshLatestViaPg } from './pg';
+import fs from 'fs/promises';
+import path from 'path';
 import type { DashboardPayload, DashboardTotals, DashboardEvent } from '../types/dashboard';
 import type { DashboardStream, StreamMetadata, StreamSort } from './types';
 
@@ -16,8 +19,12 @@ const LIVE_THRESHOLD_SECONDS = POLLER_INTERVAL_SECONDS;
 const DROP_THRESHOLD_SECONDS = Math.max(LIVE_THRESHOLD_SECONDS * 2, LIVE_THRESHOLD_SECONDS + 1);
 const SPOTLIGHT_LIMIT = Number(process.env.DASHBOARD_SPOTLIGHT_LIMIT ?? '8');
 const WINDOW_MINUTES = Number(process.env.DASHBOARD_LOOKBACK_MINUTES ?? '180');
+const API_TTL_MS = Math.max(1000, Number(process.env.DASHBOARD_API_TTL_MS ?? '8000'));
 
 export const SORT_OPTIONS: StreamSort[] = ['marketCap', 'viewers'];
+
+let lastPayload: (DashboardPayload & { config?: any }) | null = null;
+let lastFetchedAtMs = 0;
 
 interface LatestRow {
   mint_id: string;
@@ -28,6 +35,19 @@ interface LatestRow {
   thumbnail: string | null;
   is_live?: boolean | null;
   livestream: Record<string, any> | null;
+}
+
+async function readLocalTopSnapshot() {
+  try {
+    const repoRoot = path.resolve(process.cwd(), '..');
+    const filePath = path.join(repoRoot, 'artifacts', 'top', 'latest.json');
+    const raw = await fs.readFile(filePath, 'utf8');
+    const json = JSON.parse(raw ?? '{}');
+    if (!json?.fetchedAt || !Array.isArray(json?.entries)) return null;
+    return json;
+  } catch {
+    return null;
+  }
 }
 
 function toNumberOrNull(value: unknown): number | null {
@@ -118,34 +138,119 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
   const nowMs = Date.now();
   const freshCutoffIso = new Date(nowMs - DROP_THRESHOLD_SECONDS * 1000).toISOString();
 
-  const { data: latestRows, error: latestError } = await supabase
-    .from('livestream_latest')
-    .select('mint_id, fetched_at, num_participants, market_cap, usd_market_cap, thumbnail, is_live, livestream')
-    .gte('fetched_at', freshCutoffIso)
-    .order('num_participants', { ascending: false })
-    .limit(Math.max(TOP_LIMIT, FETCH_LIMIT));
+  // Serve from cache if within TTL and sort hasn't changed materially (we only cache by latest payload regardless of sort since both views are derived from the same base set and we cap at TOP_LIMIT).
+  if (lastPayload && nowMs - lastFetchedAtMs < API_TTL_MS) {
+    return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
+  }
 
-  if (latestError) {
-    if (latestError.message.includes('Could not find the table')) {
+  // Try local top snapshot first (written by poller)
+  const localTop = await readLocalTopSnapshot();
+  if (localTop) {
+    const fetchedAt = localTop.fetchedAt as string;
+    const ts = new Date(fetchedAt).getTime();
+    const ageSeconds = Number.isFinite(ts) ? Math.max(0, Math.floor((Date.now() - ts) / 1000)) : null;
+    // Consider valid if within two drop windows (covers a missed cycle)
+    const valid = ageSeconds !== null && ageSeconds <= DROP_THRESHOLD_SECONDS * 2;
+    if (valid) {
+      const entries = Array.isArray(localTop.entries) ? localTop.entries : [];
+      const streams: DashboardStream[] = [];
+      for (const item of entries) {
+        const mcap = toNumberOrNull(item?.usd_market_cap) ?? toNumberOrNull(item?.market_cap);
+        const classification = classifyStreamAge(ageSeconds);
+        if (!classification) continue;
+        const { status, countdownSeconds } = classification;
+        streams.push({
+          mintId: item.mint,
+          name: item.name ?? null,
+          symbol: item.symbol ?? null,
+          thumbnail: item.thumbnail ?? null,
+          status,
+          latestAt: fetchedAt,
+          dropCountdownSeconds: countdownSeconds,
+          metrics: {
+            lastSnapshotAgeSeconds: ageSeconds,
+            viewers: { current: toNumberOrNull(item?.num_participants) },
+            marketCap: { current: toNumberOrNull(item?.market_cap), ...(mcap !== null ? { usd: mcap } : {}) } as any,
+          },
+          metadata: null,
+        });
+      }
+
+      const limitedStreams = sortStreams(streams, sort).slice(0, TOP_LIMIT);
+      const totals = buildTotals(limitedStreams);
+      const spotlight = limitedStreams.slice(0, SPOTLIGHT_LIMIT);
+
       return {
         generatedAt: new Date().toISOString(),
         windowMinutes: WINDOW_MINUTES,
-        streams: [],
-        spotlight: [],
-        totals: {
-          totalStreams: 0,
-          liveStreams: 0,
-          disconnectingStreams: 0,
-          totalLiveViewers: 0,
-          totalLiveMarketCap: 0,
-        },
+        streams: limitedStreams,
+        spotlight,
+        totals,
         events: [],
-        latestSnapshotAt: null,
-        oldestSnapshotAgeSeconds: null,
+        latestSnapshotAt: fetchedAt,
+        oldestSnapshotAgeSeconds: ageSeconds,
         sort,
       };
     }
-    throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
+  }
+
+  // Try PG fast-path first to avoid PostgREST/schema-cache flakiness entirely.
+  let latestRows: any[] | null = null;
+  try {
+    latestRows = await fetchFreshLatestViaPg({ dropThresholdSeconds: DROP_THRESHOLD_SECONDS, limit: Math.max(TOP_LIMIT, FETCH_LIMIT) });
+  } catch {}
+
+  let latestError: any = null;
+  if (!latestRows || latestRows.length === 0) {
+    const resp = await supabase
+      .from('livestream_latest')
+      .select('mint_id, fetched_at, num_participants, market_cap, usd_market_cap, thumbnail, is_live, livestream')
+      .gte('fetched_at', freshCutoffIso)
+      .order('num_participants', { ascending: false })
+      .limit(Math.max(TOP_LIMIT, FETCH_LIMIT));
+    latestRows = resp.data as any[] | null;
+    latestError = resp.error;
+  }
+
+  if (latestError) {
+    // Attempt PG fallback for any upstream error first.
+    const pgRows = await fetchFreshLatestViaPg({ dropThresholdSeconds: DROP_THRESHOLD_SECONDS, limit: Math.max(TOP_LIMIT, FETCH_LIMIT) }).catch(() => null);
+    if (pgRows && pgRows.length) {
+      (latestRows as any) = pgRows;
+    } else {
+      const msg = latestError.message || '';
+      if (
+        msg.includes('Could not find the table') ||
+        msg.includes('Could not query the database for the schema cache') ||
+        msg.includes('schema cache')
+      ) {
+        if (lastPayload) {
+          return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
+        }
+        return {
+          generatedAt: new Date().toISOString(),
+          windowMinutes: WINDOW_MINUTES,
+          streams: [],
+          spotlight: [],
+          totals: {
+            totalStreams: 0,
+            liveStreams: 0,
+            disconnectingStreams: 0,
+            totalLiveViewers: 0,
+            totalLiveMarketCap: 0,
+          },
+          events: [],
+          latestSnapshotAt: null,
+          oldestSnapshotAgeSeconds: null,
+          sort,
+          supabaseOffline: true,
+        };
+      }
+      if (lastPayload) {
+        return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
+      }
+      throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
+    }
   }
 
   const rows = ((latestRows ?? []).filter((row) => Boolean(row?.mint_id)) as LatestRow[]);
@@ -275,4 +380,10 @@ export function getDashboardConfig() {
     availableSorts: SORT_OPTIONS,
     defaultSort: DEFAULT_SORT,
   };
+}
+
+// Patch NextResponse producer to populate cache when called via API route
+export function __cacheStore(payload: DashboardPayload & { config?: any }) {
+  lastPayload = payload;
+  lastFetchedAtMs = Date.now();
 }

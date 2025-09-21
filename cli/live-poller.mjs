@@ -2,9 +2,15 @@
 import '../lib/env.js';
 import { parseArgs } from 'util';
 import { getCurrentlyLive } from '../lib/livestream-api.js';
-import { persistLiveRoster, persistPlatformMinuteMetrics } from '../lib/supabase-storage.js';
+import { persistLiveRoster, persistPlatformMinuteMetrics, isS3Configured, uploadObjectToS3 } from '../lib/supabase-storage.js';
 import { buildJsonFileName, resolveOutputTarget, writeJsonFile } from '../lib/io-utils.js';
 import { optionalEnv } from '../lib/env.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { values } = parseArgs({
   options: {
@@ -54,6 +60,37 @@ async function persistSnapshot(data, fetchedAt) {
     await persistLiveRoster(data, fetchedAt);
     console.log(`[${fetchedAt}] Persisted ${data.length} streams to Supabase.`);
     await persistPlatformMinuteMetrics({ fetchedAt, entries: data });
+    // Write compact top-100 snapshot for the dashboard hot path
+    try {
+      const top = [...data]
+        .sort((a, b) => (Number(b?.num_participants ?? 0) - Number(a?.num_participants ?? 0)))
+        .slice(0, 100)
+        .map((item) => ({
+          mint: item.mint,
+          name: item.name ?? null,
+          symbol: item.symbol ?? null,
+          num_participants: item.num_participants ?? item.numParticipants ?? null,
+          market_cap: item.market_cap ?? null,
+          usd_market_cap: item.usd_market_cap ?? null,
+          thumbnail: item.thumbnail ?? item.image_uri ?? null,
+        }));
+
+      const topPayload = { fetchedAt, entries: top };
+      const repoRoot = path.resolve(__dirname, '..');
+      const localDir = path.join(repoRoot, 'artifacts', 'top');
+      const localPath = path.join(localDir, 'latest.json');
+      await fs.mkdir(localDir, { recursive: true });
+      await fs.writeFile(localPath, JSON.stringify(topPayload));
+      console.log(`[${fetchedAt}] Wrote top snapshot to ${localPath}`);
+
+      if (isS3Configured()) {
+        const key = 'dashboard/top/latest.json';
+        await uploadObjectToS3({ key, body: JSON.stringify(topPayload), contentType: 'application/json', cacheControl: 'no-cache' });
+        console.log(`[${fetchedAt}] Uploaded top snapshot to s3://${process.env.AWS_S3_BUCKET}/${key}`);
+      }
+    } catch (err) {
+      console.error(`[${fetchedAt}] Failed to write/upload top snapshot:`, err?.message ?? err);
+    }
   } catch (error) {
     console.error(`[${fetchedAt}] Failed to persist roster:`, error.message);
   }

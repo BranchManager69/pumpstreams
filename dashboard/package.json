@@ -19,6 +19,7 @@
     "@aws-sdk/s3-request-presigner": "^3.891.0",
     "@supabase/supabase-js": "^2.57.4",
     "next": "^14.2.32",
+    "pg": "^8.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.2.1"
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.5.1",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "typescript": "^5.9.2"

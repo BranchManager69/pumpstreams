@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchTopStreams, getDashboardConfig } from '../../../lib/fetch-top-streams';
+import { fetchTopStreams, getDashboardConfig, __cacheStore } from '../../../lib/fetch-top-streams';
 import type { DashboardPayload } from '../../../types/dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +14,7 @@ export async function GET(request: Request) {
       ...data,
       config,
     };
+    __cacheStore(payload);
     return NextResponse.json(payload, {
       headers: {
         'cache-control': 'no-store',

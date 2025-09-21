@@ -28,6 +28,11 @@ module.exports = {
         PORT: process.env.PORT || '3050',
         SUPABASE_URL: process.env.SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        // Provide direct DB URLs for server-side PG fallback
+        DATABASE_URL_SESSION: process.env.DATABASE_URL_SESSION,
+        DATABASE_URL: process.env.DATABASE_URL,
+        SUPABASE_DB_URL_SESSION: process.env.SUPABASE_DB_URL_SESSION,
+        SUPABASE_DB_URL: process.env.SUPABASE_DB_URL,
         DASHBOARD_TOP_LIMIT: process.env.DASHBOARD_TOP_LIMIT || '100',
         DASHBOARD_LOOKBACK_MINUTES: process.env.DASHBOARD_LOOKBACK_MINUTES || '180',
         NEXT_PUBLIC_SPARKLINE_GAP_MINUTES: process.env.NEXT_PUBLIC_SPARKLINE_GAP_MINUTES || '3',
