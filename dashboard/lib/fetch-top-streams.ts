@@ -30,6 +30,16 @@ interface LatestRow {
   livestream: Record<string, any> | null;
 }
 
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim().length) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function parseSort(value: string | null | undefined): StreamSort {
   if (!value) return DEFAULT_SORT;
   const normalised = value.toLowerCase();
@@ -61,7 +71,10 @@ function buildTotals(streams: DashboardStream[]): DashboardTotals {
     if (stream.status === 'live') {
       liveStreams += 1;
       totalLiveViewers += stream.metrics.viewers.current ?? 0;
-      totalLiveMarketCap += stream.metrics.marketCap.current ?? 0;
+      const marketCapUsd = stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current;
+      if (marketCapUsd !== null && Number.isFinite(marketCapUsd)) {
+        totalLiveMarketCap += marketCapUsd;
+      }
     } else if (stream.status === 'disconnecting') {
       disconnectingStreams += 1;
     }
@@ -87,10 +100,10 @@ function compareBySort(a: DashboardStream, b: DashboardStream, sort: StreamSort)
   if (sort === 'viewers') {
     const primary = numericDesc(a.metrics.viewers.current, b.metrics.viewers.current);
     if (primary !== 0) return primary;
-    return numericDesc(a.metrics.marketCap.current, b.metrics.marketCap.current);
+    return numericDesc(a.metrics.marketCap.usd ?? a.metrics.marketCap.current, b.metrics.marketCap.usd ?? b.metrics.marketCap.current);
   }
 
-  const primary = numericDesc(a.metrics.marketCap.current, b.metrics.marketCap.current);
+  const primary = numericDesc(a.metrics.marketCap.usd ?? a.metrics.marketCap.current, b.metrics.marketCap.usd ?? b.metrics.marketCap.current);
   if (primary !== 0) return primary;
   return numericDesc(a.metrics.viewers.current, b.metrics.viewers.current);
 }
@@ -174,6 +187,8 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
     if (!classification) continue;
 
     const { status, countdownSeconds } = classification;
+    const marketCapSol = toNumberOrNull(latest.market_cap);
+    const marketCapUsd = toNumberOrNull(latest.usd_market_cap);
 
     streams.push({
       mintId,
@@ -193,7 +208,9 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
           current: latest.num_participants ?? null,
         },
         marketCap: {
-          current: latest.market_cap ?? null,
+          current: marketCapUsd ?? marketCapSol ?? null,
+          usd: marketCapUsd,
+          sol: marketCapSol,
         },
       },
       metadata,

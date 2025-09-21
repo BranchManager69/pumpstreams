@@ -47,7 +47,9 @@ export type StreamMetrics = {
     current: number | null;
   };
   marketCap: {
-    current: number | null;
+    current: number | null; // USD alias for backwards compatibility
+    usd: number | null;
+    sol: number | null;
   };
 };
 

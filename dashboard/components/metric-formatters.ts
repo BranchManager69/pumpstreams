@@ -50,42 +50,34 @@ export function formatCountdown(seconds: number | null, offsetSeconds = 0): stri
   return `${hours}h`;
 }
 
-export function formatMarketUsd(sol: number | null, priceUsd: number | null): string {
-  if (sol === null || !Number.isFinite(sol) || priceUsd === null || !Number.isFinite(priceUsd)) {
+export function formatMarketUsd(usd: number | null): string {
+  if (usd === null || !Number.isFinite(usd)) {
     return '—';
   }
-  const usd = sol * priceUsd;
   return formatUsdCompact(usd);
 }
 
 export function calculateViewersPerThousandUsd(
-  solAmount: number | null,
+  usdAmount: number | null,
   viewerCount: number | null,
-  priceUsd: number | null,
 ): number | null {
   if (
-    solAmount === null ||
+    usdAmount === null ||
     viewerCount === null ||
-    priceUsd === null ||
-    !Number.isFinite(solAmount) ||
+    !Number.isFinite(usdAmount) ||
     !Number.isFinite(viewerCount) ||
-    !Number.isFinite(priceUsd) ||
-    solAmount <= 0 ||
-    priceUsd <= 0
+    usdAmount <= 0
   ) {
     return null;
   }
-  const usd = solAmount * priceUsd;
-  if (usd <= 0) return null;
-  return (viewerCount / usd) * 1_000;
+  return (viewerCount / usdAmount) * 1_000;
 }
 
 export function formatViewersPerThousandUsd(
-  solAmount: number | null,
+  usdAmount: number | null,
   viewerCount: number | null,
-  priceUsd: number | null,
 ): string {
-  const ratio = calculateViewersPerThousandUsd(solAmount, viewerCount, priceUsd);
+  const ratio = calculateViewersPerThousandUsd(usdAmount, viewerCount);
   if (ratio === null) return '—';
   if (ratio >= 100) return ratio.toFixed(0);
   if (ratio >= 10) return ratio.toFixed(1);

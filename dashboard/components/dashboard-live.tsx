@@ -8,7 +8,6 @@ import { SpotlightReel } from './spotlight-reel';
 import { StreamScatter } from './stream-scatter';
 import { formatMetric, formatUsdCompact } from './metric-formatters';
 import { DebugConsole } from './debug-console';
-import { useSolPrice } from './sol-price-context';
 
 const REFRESH_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS ?? '20000');
 
@@ -174,14 +173,11 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
   const isOffline = Boolean(payload.supabaseOffline) || fetchState === 'error';
 
-  const { priceUsd } = useSolPrice();
-
   const totalMarketCapUsd = useMemo(() => {
-    if (priceUsd === null) return null;
     const total = payload.totals.totalLiveMarketCap;
     if (!Number.isFinite(total)) return null;
-    return total * priceUsd;
-  }, [payload.totals.totalLiveMarketCap, priceUsd]);
+    return total;
+  }, [payload.totals.totalLiveMarketCap]);
 
   const viewersCompact = formatMetric(payload.totals.totalLiveViewers);
   const marketCapUsdCompact = formatUsdCompact(totalMarketCapUsd);
@@ -209,7 +205,6 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
           { label: 'Live', value: payload.totals.liveStreams },
           { label: 'Signal lost', value: payload.totals.disconnectingStreams },
           { label: 'Viewers', value: formatWhole(payload.totals.totalLiveViewers) },
-          { label: 'Market cap (SOL)', value: formatWhole(payload.totals.totalLiveMarketCap) },
           { label: 'Market cap (USD)', value: formatUsdWhole(totalMarketCapUsd) },
         ],
       },
@@ -287,7 +282,7 @@ export function DashboardLive({ initialPayload }: DashboardLiveProps) {
 
       <SpotlightReel streams={spotlightStreams} />
 
-      <StreamScatter streams={filteredStreams} priceUsd={priceUsd} />
+      <StreamScatter streams={filteredStreams} />
 
       {fetchState === 'error' && errorMessage && (
         <div className="alert error" role="status">

@@ -4,7 +4,6 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 import type { DashboardStream } from '../lib/types';
 import { StreamCard } from './stream-card';
-import { useSolPrice } from './sol-price-context';
 import { formatAge, formatMarketUsd, formatViewerCount } from './metric-formatters';
 import { ViewersPerKVisual } from './viewers-per-k';
 
@@ -20,7 +19,6 @@ const statusLabels: Record<DashboardStream['status'], string> = {
 };
 
 export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardProps) {
-  const { priceUsd } = useSolPrice();
   const grouped = new Map<DashboardStream['status'], DashboardStream[]>();
   for (const status of statusOrder) grouped.set(status, []);
 
@@ -61,13 +59,12 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
               </td>
               <td className="align-right viewers-cell numeric-cell">{formatViewerCount(stream.metrics.viewers.current)}</td>
               <td className="align-right numeric-cell">
-                <span className="market-chip">{formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
+                <span className="market-chip">{formatMarketUsd(stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current)}</span>
               </td>
               <td className="align-right ratio-cell">
                 <ViewersPerKVisual
-                  solAmount={stream.metrics.marketCap.current}
+                  usdAmount={stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current}
                   viewerCount={stream.metrics.viewers.current}
-                  priceUsd={priceUsd}
                   layout="table"
                 />
               </td>
@@ -102,7 +99,6 @@ export function LiveLeaderboard({ streams, ageOffsetSeconds }: LiveLeaderboardPr
             stream={stream}
             rank={index + 1}
             ageOffsetSeconds={ageOffsetSeconds}
-            priceUsd={priceUsd}
           />
         ))}
       </div>

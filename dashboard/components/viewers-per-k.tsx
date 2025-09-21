@@ -3,9 +3,8 @@
 import { calculateViewersPerThousandUsd, formatViewersPerThousandUsd } from './metric-formatters';
 
 type ViewersPerKProps = {
-  solAmount: number | null;
+  usdAmount: number | null;
   viewerCount: number | null;
-  priceUsd: number | null;
   layout?: 'table' | 'card';
   maxIcons?: number;
 };
@@ -32,13 +31,12 @@ function buildIconArray(value: number, maxIcons: number) {
 }
 
 export function ViewersPerKVisual({
-  solAmount,
+  usdAmount,
   viewerCount,
-  priceUsd,
   layout = 'table',
   maxIcons = MAX_ICONS_DEFAULT,
 }: ViewersPerKProps) {
-  const ratio = calculateViewersPerThousandUsd(solAmount, viewerCount, priceUsd);
+  const ratio = calculateViewersPerThousandUsd(usdAmount, viewerCount);
   if (ratio === null) {
     return (
       <span className={`viewers-k viewers-k--${layout} viewers-k--empty`} aria-label="Viewers per $1K unavailable">
@@ -48,7 +46,7 @@ export function ViewersPerKVisual({
   }
 
   const { icons, overflow } = buildIconArray(ratio, maxIcons);
-  const ratioLabel = formatViewersPerThousandUsd(solAmount, viewerCount, priceUsd);
+  const ratioLabel = formatViewersPerThousandUsd(usdAmount, viewerCount);
 
   return (
     <div

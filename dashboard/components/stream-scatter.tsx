@@ -32,10 +32,9 @@ type TooltipState = {
 
 export type StreamScatterProps = {
   streams: DashboardStream[];
-  priceUsd: number | null;
 };
 
-export function StreamScatter({ streams, priceUsd }: StreamScatterProps) {
+export function StreamScatter({ streams }: StreamScatterProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [renderKey, setRenderKey] = useState(0);
@@ -44,8 +43,8 @@ export function StreamScatter({ streams, priceUsd }: StreamScatterProps) {
     return streams
       .map((stream) => {
         const viewers = stream.metrics.viewers.current ?? 0;
-        const marketCapSol = stream.metrics.marketCap.current ?? 0;
-        const marketCapUsd = priceUsd ? marketCapSol * priceUsd : null;
+        const marketCapSol = stream.metrics.marketCap.sol ?? null;
+        const marketCapUsd = stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current ?? null;
         return {
           id: stream.mintId,
           name: stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6),
@@ -55,12 +54,12 @@ export function StreamScatter({ streams, priceUsd }: StreamScatterProps) {
           marketCapSol,
           marketCapUsd,
           viewersSafe: Math.max(viewers, MIN_VALUE),
-          marketCapSafe: Math.max(marketCapUsd ?? marketCapSol, MIN_VALUE),
+          marketCapSafe: Math.max((marketCapUsd ?? marketCapSol ?? MIN_VALUE), MIN_VALUE),
           snapshotAge: stream.metrics.lastSnapshotAgeSeconds ?? null,
         };
       })
       .filter((point) => point.viewersSafe > 0 || point.marketCapSafe > 0);
-  }, [streams, priceUsd]);
+  }, [streams]);
 
   const scales = useMemo(() => {
     if (!points.length) {

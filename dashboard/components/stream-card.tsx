@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import type { DashboardStream } from '../lib/types';
-import { useSolPrice } from './sol-price-context';
 import { formatAge, formatCountdown, formatMarketUsd, formatViewerCount } from './metric-formatters';
 import { ViewersPerKVisual } from './viewers-per-k';
 
@@ -10,13 +9,9 @@ export type StreamCardProps = {
   stream: DashboardStream;
   rank: number;
   ageOffsetSeconds: number;
-  priceUsd?: number | null;
 };
 
-export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdProp }: StreamCardProps) {
-  const { priceUsd: priceUsdContext } = useSolPrice();
-  const priceUsd = priceUsdProp ?? priceUsdContext;
-
+export function StreamCard({ stream, rank, ageOffsetSeconds }: StreamCardProps) {
   return (
     <Link href={`/tokens/${stream.mintId}`} className={`mobile-card mobile-${stream.status}`} prefetch={false}>
       <header>
@@ -56,13 +51,12 @@ export function StreamCard({ stream, rank, ageOffsetSeconds, priceUsd: priceUsdP
         <span>viewers</span>
       </div>
       <div className="secondary-line">
-        <span className="metric">MC {formatMarketUsd(stream.metrics.marketCap.current, priceUsd)}</span>
+        <span className="metric">MC {formatMarketUsd(stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current)}</span>
         <span className="metric metric--iconic">
           <span className="metric__label">V/$1K</span>
           <ViewersPerKVisual
-            solAmount={stream.metrics.marketCap.current}
+            usdAmount={stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current}
             viewerCount={stream.metrics.viewers.current}
-            priceUsd={priceUsd}
             layout="card"
           />
         </span>

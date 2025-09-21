@@ -2,18 +2,11 @@
 
 import Image from 'next/image';
 import type { DashboardStream } from '../lib/types';
+import { formatMarketUsd } from './metric-formatters';
 
 export type SpotlightReelProps = {
   streams: DashboardStream[];
 };
-
-function formatMarketCap(value: number | null): string {
-  if (value === null || value === undefined) return 'MC n/a';
-  const compact = new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
-  }).format(value);
-  return `MC ${compact} SOL`;
-}
 
 export function SpotlightReel({ streams }: SpotlightReelProps) {
   if (!streams.length) {
@@ -34,7 +27,7 @@ export function SpotlightReel({ streams }: SpotlightReelProps) {
               <div className="title">{stream.name ?? stream.symbol ?? stream.mintId.slice(0, 6)}</div>
               <div className="stats">
                 <span>{(stream.metrics.viewers.current ?? 0).toLocaleString()} viewers</span>
-                <span className="muted">{formatMarketCap(stream.metrics.marketCap.current)}</span>
+                <span className="muted">{formatMarketUsd(stream.metrics.marketCap.usd ?? stream.metrics.marketCap.current)}</span>
               </div>
             </div>
           </div>
