@@ -25,6 +25,7 @@ export const SORT_OPTIONS: StreamSort[] = ['marketCap', 'viewers'];
 
 let lastPayload: (DashboardPayload & { config?: any }) | null = null;
 let lastFetchedAtMs = 0;
+let lastSource: 'snapshot' | 'pg' | 'supabase' | 'fallback' = 'fallback';
 
 interface LatestRow {
   mint_id: string;
@@ -140,6 +141,7 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
 
   // Serve from cache if within TTL and sort hasn't changed materially (we only cache by latest payload regardless of sort since both views are derived from the same base set and we cap at TOP_LIMIT).
   if (lastPayload && nowMs - lastFetchedAtMs < API_TTL_MS) {
+    lastSource = 'fallback';
     return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
   }
 
@@ -180,6 +182,7 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
       const totals = buildTotals(limitedStreams);
       const spotlight = limitedStreams.slice(0, SPOTLIGHT_LIMIT);
 
+      lastSource = 'snapshot';
       return {
         generatedAt: new Date().toISOString(),
         windowMinutes: WINDOW_MINUTES,
@@ -198,6 +201,9 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
   let latestRows: any[] | null = null;
   try {
     latestRows = await fetchFreshLatestViaPg({ dropThresholdSeconds: DROP_THRESHOLD_SECONDS, limit: Math.max(TOP_LIMIT, FETCH_LIMIT) });
+    if (latestRows && latestRows.length) {
+      lastSource = 'pg';
+    }
   } catch {}
 
   let latestError: any = null;
@@ -210,6 +216,9 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
       .limit(Math.max(TOP_LIMIT, FETCH_LIMIT));
     latestRows = resp.data as any[] | null;
     latestError = resp.error;
+    if (latestRows && latestRows.length) {
+      lastSource = 'supabase';
+    }
   }
 
   if (latestError) {
@@ -225,6 +234,7 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
         msg.includes('schema cache')
       ) {
         if (lastPayload) {
+          lastSource = 'fallback';
           return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
         }
         return {
@@ -247,6 +257,7 @@ export async function fetchTopStreams(sortRequest?: string): Promise<DashboardPa
         };
       }
       if (lastPayload) {
+        lastSource = 'fallback';
         return { ...(lastPayload as DashboardPayload), sort } as DashboardPayload;
       }
       throw new Error(`Failed to fetch latest livestream snapshots: ${latestError.message}`);
@@ -386,4 +397,8 @@ export function getDashboardConfig() {
 export function __cacheStore(payload: DashboardPayload & { config?: any }) {
   lastPayload = payload;
   lastFetchedAtMs = Date.now();
+}
+
+export function __getLastSource() {
+  return lastSource;
 }

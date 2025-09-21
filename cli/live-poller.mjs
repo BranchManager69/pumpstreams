@@ -50,7 +50,7 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function persistSnapshot(data, fetchedAt) {
+async function persistSnapshot(data, fetchedAt, { pagesFetched }) {
   if (!data?.length) {
     console.log(`[${fetchedAt}] No live streams reported.`);
     return;
@@ -114,6 +114,7 @@ async function persistSnapshot(data, fetchedAt) {
 async function fetchFullRoster(pageLimit) {
   const all = [];
   let offset = 0;
+  let pagesFetched = 0;
 
   while (true) {
     const batch = await getCurrentlyLive({ offset, limit: pageLimit, includeNsfw: true });
@@ -124,6 +125,7 @@ async function fetchFullRoster(pageLimit) {
     }
 
     all.push(...batch);
+    pagesFetched += 1;
     if (count < pageLimit) {
       break;
     }
@@ -131,7 +133,7 @@ async function fetchFullRoster(pageLimit) {
     offset += pageLimit;
   }
 
-  return all;
+  return { data: all, pagesFetched };
 }
 
 async function main() {
@@ -141,8 +143,8 @@ async function main() {
     const startedAt = Date.now();
     const fetchedAt = new Date().toISOString();
     try {
-      const data = await fetchFullRoster(pageSize);
-      await persistSnapshot(data, fetchedAt);
+      const { data, pagesFetched } = await fetchFullRoster(pageSize);
+      await persistSnapshot(data, fetchedAt, { pagesFetched });
     } catch (error) {
       console.error(`[${fetchedAt}] Poll failed:`, error.message);
     }
