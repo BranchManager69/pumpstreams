@@ -3,6 +3,13 @@
 This repo powers the Pumpstreams CLI and dashboard. Use the steps below to set up,
 run checks, deploy updates, and capture livestreams reliably.
 
+> **Response Formatting Preference**
+>
+> When summarising findings or instructions, present information with clear ASCII
+> structure (boxes, section headers, divider lines, bullet lists) so it is easy to
+> scan even when exhausted. Keep technical fidelity high while making the layout
+> visually distinct.
+
 ## Quick Setup
 
 ```bash

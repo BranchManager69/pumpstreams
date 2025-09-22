@@ -8,6 +8,8 @@ module.exports = {
       script: 'cli/index.mjs',
       args: 'poller',
       instances: 1,
+      exec_mode: 'fork',
+      merge_logs: true,
       env: {
         LIVE_POLLER_INTERVAL_MS: process.env.LIVE_POLLER_INTERVAL_MS || '30000',
         LIVE_POLLER_LIMIT: process.env.LIVE_POLLER_LIMIT || '1000',
@@ -23,6 +25,7 @@ module.exports = {
       script: 'npm',
       args: 'run start',
       instances: 1,
+      merge_logs: true,
       env: {
         NODE_ENV: 'production',
         PORT: process.env.PORT || '3050',
@@ -37,21 +40,6 @@ module.exports = {
         DASHBOARD_LOOKBACK_MINUTES: process.env.DASHBOARD_LOOKBACK_MINUTES || '180',
         NEXT_PUBLIC_SPARKLINE_GAP_MINUTES: process.env.NEXT_PUBLIC_SPARKLINE_GAP_MINUTES || '3',
         NEXT_PUBLIC_DASHBOARD_REFRESH_MS: process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS || '20000',
-      },
-    },
-    {
-      name: 'snapshot-cleanup',
-      script: 'npm',
-      args: 'run cleanup:snapshots',
-      instances: 1,
-      autorestart: false,
-      cron_restart: '0 * * * *',
-      env: {
-        SUPABASE_URL: process.env.SUPABASE_URL,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        SNAPSHOT_RETENTION_HOURS: process.env.SNAPSHOT_RETENTION_HOURS || '48',
-        SNAPSHOT_CLEANUP_BATCH: process.env.SNAPSHOT_CLEANUP_BATCH || '5000',
-        SNAPSHOT_CLEANUP_MAX_ITER: process.env.SNAPSHOT_CLEANUP_MAX_ITER || '200',
       },
     },
   ],

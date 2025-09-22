@@ -54,126 +54,115 @@ Comprehensive reconnaissance and monitoring toolkit for Pump.fun’s trading and
 
 ---
 
-## Installation
+## Quick Start
+
+### Install dependencies
 
 ```bash
 git clone https://github.com/BranchManager69/pumpstreams.git
 cd pumpstreams
 npm install
 
-# Local analytics (no cloud required)
-cp .env.example .env.local
-supabase start               # launches the bundled Supabase warehouse on high ports
-
-# Prisma client (optional but recommended)
-npx prisma generate          # uses the schema pulled from Supabase migrations
-
-# Hosted analytics (optional)
-cp .env.example .env.remote  # then paste the Supabase URL + keys from the dashboard
+cd dashboard
+npm install
+cd ..
 ```
 
-## Documentation
+Requires Node.js 20+. The dashboard shares the root lockfile but keeps its own `node_modules`.
 
-- Build the self-hosted GitBook-style site with `npm run docs:build` (output in `docs/_book/`)
-- Preview locally on this server with `npm run docs:serve` (defaults to port 3052)
-- Deploy the latest build to `docs.dexter.cash` with `npm run docs:deploy` (renders + rsyncs to `/var/www/docs.dexter.cash/`)
-- Publish by pointing your web server or reverse proxy at the `docs/_book/` directory—perfect for a `docs.<domain>` subdomain
-- Add or reorder pages by editing Markdown inside `docs/` and updating `docs/SUMMARY.md`
+### Configure environments
 
-> Tip: run `tools/install-docs-hook.sh` once on the server so every commit to `main` that touches `docs/` or `README.md` auto-runs `npm run docs:deploy`.
+- Copy `.env.example` to `.env.remote` for the hosted Supabase project and paste the `SUPABASE_*` secrets.
+- For local analytics, copy `.env.example` to `.env.local`, then run `supabase start` (brings up Postgres on high ports). Prefix CLI or scripts with `PUMPSTREAMS_ENV_FILE=.env.local` when you want to target it.
+- `npm run prisma:generate` (or `npm install`) refreshes the Prisma client automatically after environment changes.
 
-Hourly auto-publish (exactly on the clock):
+### Run the core checks
 
 ```bash
-sudo systemctl enable --now docs-deploy.timer
+npm test                    # hits live pump.fun APIs; keep limits small when poking locally
+npm run offline             # fixture-based helper tests, no network required
+
+cd dashboard
+npm run build
+cd ..
 ```
 
-Systemd will trigger the deploy script at `HH:00:00` every hour, ensuring the static site stays fresh even if nobody pushes commits locally.
-
-The repo supports two analytics back-ends out of the box:
-
-- **Hosted Supabase Cloud (default)** – commands look for `.env.remote` first. With the supplied file in
-  place, every CLI run will persist to the cloud project automatically.
-- **Local Supabase** – `supabase start` spins up a Postgres instance on ports `5542x`. Prefix commands with
-  `PUMPSTREAMS_ENV_FILE=.env.local` whenever you want to target the local warehouse instead.
-
-### Prisma workflow
-
-- The repo now ships a generated Prisma client (`@prisma/client`).
-- Schema changes should continue to live in `supabase/migrations/*.sql`; the Supabase CLI remains the source of truth for applying them.
-- Run `supabase db reset --local --yes` to rebuild the local database from migrations, then `npm run prisma:pull` and `npm run prisma:generate` to refresh Prisma types.
-- Deployments regenerate the client automatically via the `postinstall` hook, so PM2 restarts always pick up the latest schema.
-
-## WebSocket Endpoint
-
-- **URL:** `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket`
-- **Protocol:** Socket.io v4 (`tradeCreated` is the primary event)
-
-## Legacy CLI utilities
-
-The original CLI remains for diagnostics and scripted exports, but the dashboard is the primary interface now. Every entry point has inline help—run `npm run cli -- --help` for the menu or append `--help` to any command (for example, `npm run live -- --help`, `npm run monitor -- --help`, or `npm run subscribe -- --help`).
-
-Common uses today:
-
-- Spot-check `/live` metadata: `npm run live -- list --json` (add `--clips` or `--includeToken` only when you explicitly need clip metadata or a short-lived join-token preview).
-- Capture a diagnostic LiveKit session: `npm run subscribe -- <mint> --duration 45 --json` (persists a session summary into Supabase’s `livestream_sessions`).
-- Re-run the Puppeteer recon: `npm run cli -- investigate` (scrolls through multiple `/live` segments, captures artifacts, and clicks the first stream card once).
-
-Anything beyond those tasks should be treated as legacy; consult the built-in help output before relying on older commands.
-
-### MCP proxy helper
-
-To bridge the hosted Dexter MCP endpoint into a local stdio transport, run:
+### Launch the dashboard locally
 
 ```bash
-node tools/mcp-http-proxy.mjs --url https://mcp.dexter.cash/mcp --bearer "$TOKEN_AI_MCP_TOKEN"
+cd dashboard
+npm run dev -- --port 3051   # free port so it doesn't collide with the PM2 instance on 3050
 ```
 
-The proxy opens a Streamable HTTP connection to the remote server and forwards all JSON-RPC traffic over stdio, making it compatible with Codex or any other local MCP client. You can add `-H "Header: value"` for custom headers and `-v` for verbose logging.
+The production dashboard is served by PM2 on port 3050. Use a different port for hot reload to avoid clobbering it.
+
+---
+
+## Everyday tasks
+
+### CLI helpers
+
+- Run `npm run cli` for the interactive menu or append `--help` to any command for flags.
+- Quick checks: `npm run live -- list --json`, `npm run subscribe -- <mint> --duration 45`, `npm run cli -- investigate`.
+- Capture workflow: `. .env.remote && npm run capture -- <mintId> --duration 15 --label "sample" --captured-by "agent"` (needs Supabase + AWS credentials).
+
+### Dashboard deployment
+
+```bash
+cd dashboard
+npm run build
+pm2 restart pumpstreams-fe --update-env
+cd ..
+```
+
+After the restart, spot-check `/tokens/<mint>` (or the page you touched) to confirm data and assets load.
+
+---
+
+## Data & Prisma
+
+- Supabase migrations live in `supabase/migrations/*.sql`; use the Supabase CLI (`supabase db reset --local --yes`) to rebuild local databases.
+- `npm run prisma:pull` and `npm run prisma:generate` keep Prisma types aligned with Supabase. The `postinstall` hook runs `generate` automatically.
+- Set `SUPABASE_DB_URL` / `SUPABASE_DB_URL_SESSION` when you need direct Postgres access (dashboard API routes and migration scripts rely on them).
+
+---
+
+## Documentation (optional)
+
+- `npm run docs:build` renders Honkit output to `docs/_book/`.
+- `npm run docs:serve` previews locally (default port 3052).
+- `npm run docs:deploy` rsyncs the build to `/var/www/docs.dexter.cash/`. Run `tools/install-docs-hook.sh` once if you want commits touching docs to auto-deploy.
+
+Systemd users can enable the hourly refresher with `sudo systemctl enable --now docs-deploy.timer`.
+
+---
 
 ## Testing
 
-Start with the offline helper sanity check (uses recorded fixtures, no network calls):
+- Offline fixtures: `node --test tests/helpers-offline.test.mjs`.
+- Live API smoke: `npm run smoke` (limit 1 stream, 30 s timeout).
+- Full run: `npm test` (limit 3 streams, 60 s timeout by default). Adjust with `PUMPSTREAMS_TEST_LIMIT` and `PUMPSTREAMS_TEST_TIMEOUT` to reduce load.
 
-```bash
-node --test tests/helpers-offline.test.mjs
-```
+---
 
-Live endpoint coverage still exercises the public pump.fun APIs—no mocks. Keep usage polite and trim the roster size when needed:
+## Key environment variables
 
-```bash
-# Quick smoke check (limit 1 stream, 30s timeout)
-npm run smoke
+| Variable(s) | Required for | Notes |
+|-------------|--------------|-------|
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | CLI ingest, dashboard APIs | Primary Supabase project credentials. Without them, writes and server-side reads are disabled. |
+| `SUPABASE_ANON_KEY` | Dashboard client | Used by the Next.js client for read access. |
+| `SUPABASE_DB_URL`, `SUPABASE_DB_URL_SESSION` | Dashboard SSR, migrations | Point to Supabase Postgres (read-only + primary). Needed for metrics queries and Prisma scripts. |
+| `PUMPSTREAMS_ENV_FILE` | CLI + scripts | Picks the env file (`.env.remote` by default, set to `.env.local` for local Supabase). |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION` | Capture CLI, clip presign routes | Required when archiving livestream clips to S3. |
 
-# Default run (limit 3 streams, 60s timeout)
-npm test
+Additional knobs (poller cadence, dashboard limits, etc.) still exist—check inline help or the docs when you need to tune them.
 
-# Reduce load during CI or local runs
-PUMPSTREAMS_TEST_LIMIT=1 PUMPSTREAMS_TEST_TIMEOUT=30000 npm test
-```
+---
 
-## Configuration
+## Reference
 
-Environment variables let you point the tooling at alternate hosts or tweak behaviour without touching source. Defaults target production pump.fun endpoints.
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `PUMPSTREAMS_FRONTEND_API` | `https://frontend-api-v3.pump.fun` | REST endpoint serving `coins/currently-live` |
-| `PUMPSTREAMS_LIVESTREAM_API` | `https://livestream-api.pump.fun` | Livestream metadata, clips, join tokens |
-| `PUMPSTREAMS_LIVEKIT_EDGE` | `https://pump-prod-tg2x8veh.livekit.cloud` | Base URL queried for LiveKit regions |
-| `PUMPSTREAMS_ORIGIN` | `https://pump.fun` | Spoofed `Origin` header for REST requests |
-| `PUMPSTREAMS_REFERER` | `https://pump.fun/live` | Spoofed `Referer` header for REST requests |
-| `LIVE_POLLER_LIMIT` | `1000` | Page size for live roster pagination (poller walks all pages, includes NSFW) |
-| `LIVE_POLLER_INTERVAL_MS` | `30000` | Polling cadence for `/live` roster |
-| `DASHBOARD_FETCH_LIMIT` | `1000` | Latest snapshots pulled into the dashboard buffer |
-| `DASHBOARD_TOP_LIMIT` | `100` | Active streams rendered above the fold |
-| `DASHBOARD_LOOKBACK_MINUTES` | `180` | Metadata hint shown in the dashboard payload |
-| `DASHBOARD_DISCONNECT_CYCLES` | *(unused)* | Former grace-cycle override (drop window now auto=2× poll interval) |
-| `DASHBOARD_SPOTLIGHT_LIMIT` | `8` | Live streams highlighted in the hero reel |
-| `DASHBOARD_DEFAULT_SORT` | `marketCap` | Primary ordering (`marketCap` or `viewers`) returned by `/api/live` |
-| `NEXT_PUBLIC_DASHBOARD_REFRESH_MS` | `20000` | Client-side refresh cadence for the live leaderboard (ms) |
-
-For deeper knobs (including legacy monitor flags), consult the inline CLI help or the docs in `docs/` if you truly need them.
+- WebSocket endpoint: `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket` (Socket.io v4, primary event `tradeCreated`).
+- MCP proxy helper: `node tools/mcp-http-proxy.mjs --url https://mcp.dexter.cash/mcp --bearer "$TOKEN_AI_MCP_TOKEN"` (add `-H` for extra headers, `-v` for verbose logging).
 
 ## License
 
