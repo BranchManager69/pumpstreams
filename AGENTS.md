@@ -49,6 +49,11 @@ cd ..
 
 After restarting, spot-check `/tokens/<mint>` (or the relevant page).
 
+## Platform Metrics APIs
+
+- `GET /api/platform/metrics` &rarr; Raw platform metrics samples; accepts optional `windowMinutes`.
+- `GET /api/platform/viewer-trend` &rarr; Aggregated total-viewer trend with daily/hourly averages and min/max.
+
 ## Environment Notes
 
 - Supabase credentials arrive via env vars: `SUPABASE_URL`,

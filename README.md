@@ -162,7 +162,7 @@ Additional knobs (poller cadence, dashboard limits, etc.) still exist—check in
 ## Reference
 
 - WebSocket endpoint: `wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket` (Socket.io v4, primary event `tradeCreated`).
-- MCP proxy helper: `node tools/mcp-http-proxy.mjs --url https://mcp.dexter.cash/mcp --bearer "$TOKEN_AI_MCP_TOKEN"` (add `-H` for extra headers, `-v` for verbose logging).
+- MCP proxy helper: `node ../dexter-mcp/dexter-mcp-stdio-bridge.mjs --url https://mcp.dexter.cash/mcp --bearer "$TOKEN_AI_MCP_TOKEN"` (add `-H` for extra headers, `-v` for verbose logging).
 
 ## License
 
